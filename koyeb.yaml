@@ -22,7 +22,7 @@ command: gunicorn wsgi:app -b 0.0.0.0:8080
 regions:
   - fra
 instances:
-  - type: nano
+  - type: free
     scaling:
       min: 1
       max: 1
