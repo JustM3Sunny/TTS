@@ -1,0 +1,28 @@
+# Git files
+.git/
+.gitignore
+
+# Temporary files
+temp_audio/
+voice_samples/
+*.wav
+
+# Koyeb CLI files
+koyeb-cli/
+koyeb-cli.zip
+
+# IDE files
+.vscode/
+.idea/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Docker files (not needed for Koyeb)
+Dockerfile
+docker-compose.yml
+
+# Render files (not needed for Koyeb)
+render.yaml

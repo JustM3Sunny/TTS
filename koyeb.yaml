@@ -1,0 +1,24 @@
+name: tts-platform
+type: web
+git:
+  repository: github.com/JustM3Sunny/TTS
+  branch: main
+ports:
+  - port: 8080
+    protocol: http
+build:
+  builder: buildpacks
+  buildpacks:
+    language: python
+  env:
+    - name: PYTHON_VERSION
+      value: "3.10"
+env:
+  - name: PORT
+    value: "8080"
+  - name: KOYEB
+    value: "true"
+instance_types:
+  - name: nano
+regions:
+  - fra
