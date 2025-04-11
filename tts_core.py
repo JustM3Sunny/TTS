@@ -1,5 +1,5 @@
 import asyncio
-import aiohttp
+import requests
 import base64
 import os
 import logging
@@ -97,22 +97,22 @@ class TTSEngine:
         logger.info(f"Generating audio for text: '{text[:50]}...' using voice: {selected_voice}")
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(f"API request failed with status {response.status}: {error_text}")
-                        return None
+            # Use requests instead of aiohttp
+            response = requests.post(url, json=payload)
 
-                    result = await response.json()
-                    if 'data' not in result:
-                        logger.error(f"Unexpected API response: {result}")
-                        return None
+            if response.status_code != 200:
+                logger.error(f"API request failed with status {response.status_code}: {response.text}")
+                return None
 
-                    audio_data = result['data']
-                    return base64.b64decode(audio_data)
+            result = response.json()
+            if 'data' not in result:
+                logger.error(f"Unexpected API response: {result}")
+                return None
 
-        except aiohttp.ClientError as e:
+            audio_data = result['data']
+            return base64.b64decode(audio_data)
+
+        except requests.RequestException as e:
             logger.error(f"API request failed: {e}")
         except ConnectionResetError as e:
             logger.error(f"Connection reset error: {e}")
