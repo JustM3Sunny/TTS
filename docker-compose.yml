@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  tts-platform:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./temp_audio:/app/temp_audio
+      - ./voice_samples:/app/voice_samples
+    restart: unless-stopped

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Text-to-Speech Platform</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            background-color: #f8f9fa;
+        }
+        .header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        .card {
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .voice-card {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .voice-card:hover {
+            transform: translateY(-5px);
+        }
+        .voice-card.active {
+            border: 2px solid #0d6efd;
+        }
+        .controls {
+            margin-top: 2rem;
+        }
+        #audioPlayer {
+            width: 100%;
+            margin-top: 1rem;
+        }
+        .api-section {
+            margin-top: 3rem;
+        }
+        pre {
+            background-color: #f1f1f1;
+            padding: 1rem;
+            border-radius: 5px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Advanced Text-to-Speech Platform</h1>
+            <p class="lead">Convert text to speech using multiple voices</p>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Text to Speech</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="textInput" class="form-label">Enter text to convert to speech:</label>
+                            <textarea id="textInput" class="form-control" rows="4" placeholder="Type your text here..."></textarea>
+                        </div>
+
+                        <h4>Select a Voice:</h4>
+                        <div class="row" id="voiceSelector">
+                            {% for name, model in voices.items() %}
+                            <div class="col-md-3 mb-3">
+                                <div class="card voice-card" data-voice="{{ name }}">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title">{{ name }}</h5>
+                                        <p class="card-text small text-muted">{{ model }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="controls">
+                            <button id="generateBtn" class="btn btn-primary btn-lg">Generate Speech</button>
+                            <button id="playBtn" class="btn btn-success btn-lg ms-2">Play</button>
+                            <button id="downloadBtn" class="btn btn-secondary btn-lg ms-2">Download</button>
+                        </div>
+
+                        <div class="loading" id="loadingIndicator">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p>Generating audio...</p>
+                        </div>
+
+                        <audio id="audioPlayer" controls></audio>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="api-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>API Documentation</h3>
+                </div>
+                <div class="card-body">
+                    <h4>Available Endpoints:</h4>
+                    
+                    <h5>1. Get Available Voices</h5>
+                    <p><code>GET /api/voices</code></p>
+                    <p>Returns a list of all available voices.</p>
+                    
+                    <h5>2. Convert Text to Speech (Audio File)</h5>
+                    <p><code>POST /api/tts</code></p>
+                    <p>Converts text to speech and returns an audio file.</p>
+                    <p>Request Body:</p>
+<pre>{
+    "text": "Your text to convert to speech",
+    "voice": "Asteria" // Optional, defaults to Asteria
+}</pre>
+                    
+                    <h5>3. Convert Text to Speech (Base64)</h5>
+                    <p><code>POST /api/tts/base64</code></p>
+                    <p>Converts text to speech and returns base64 encoded audio data.</p>
+                    <p>Request Body:</p>
+<pre>{
+    "text": "Your text to convert to speech",
+    "voice": "Asteria" // Optional, defaults to Asteria
+}</pre>
+                    <p>Response:</p>
+<pre>{
+    "success": true,
+    "audio_data": "base64_encoded_audio_data",
+    "voice": "Asteria"
+}</pre>
+
+                    <h4>Example Usage (JavaScript):</h4>
+<pre>
+// Example: Convert text to speech and play it
+async function convertTextToSpeech() {
+    const response = await fetch('/api/tts/base64', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            text: "Hello, this is a test of the text to speech API.",
+            voice: "Asteria"
+        })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+        // Create audio from base64 data
+        const audio = new Audio(`data:audio/wav;base64,${data.audio_data}`);
+        audio.play();
+    }
+}
+</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elements
+            const textInput = document.getElementById('textInput');
+            const voiceSelector = document.getElementById('voiceSelector');
+            const generateBtn = document.getElementById('generateBtn');
+            const playBtn = document.getElementById('playBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const audioPlayer = document.getElementById('audioPlayer');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            let selectedVoice = 'Asteria'; // Default voice
+            let audioData = null;
+            
+            // Select voice
+            voiceSelector.addEventListener('click', function(e) {
+                const card = e.target.closest('.voice-card');
+                if (card) {
+                    // Remove active class from all cards
+                    document.querySelectorAll('.voice-card').forEach(c => {
+                        c.classList.remove('active');
+                    });
+                    
+                    // Add active class to selected card
+                    card.classList.add('active');
+                    
+                    // Set selected voice
+                    selectedVoice = card.dataset.voice;
+                }
+            });
+            
+            // Set default active voice
+            document.querySelector(`.voice-card[data-voice="${selectedVoice}"]`).classList.add('active');
+            
+            // Generate speech
+            generateBtn.addEventListener('click', async function() {
+                const text = textInput.value.trim();
+                
+                if (!text) {
+                    alert('Please enter some text to convert to speech.');
+                    return;
+                }
+                
+                // Show loading indicator
+                loadingIndicator.style.display = 'block';
+                
+                try {
+                    const response = await fetch('/api/tts/base64', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            text: text,
+                            voice: selectedVoice
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // Store audio data
+                        audioData = data.audio_data;
+                        
+                        // Set audio source
+                        audioPlayer.src = `data:audio/wav;base64,${audioData}`;
+                        
+                        // Enable play and download buttons
+                        playBtn.disabled = false;
+                        downloadBtn.disabled = false;
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('An error occurred while generating speech.');
+                } finally {
+                    // Hide loading indicator
+                    loadingIndicator.style.display = 'none';
+                }
+            });
+            
+            // Play audio
+            playBtn.addEventListener('click', function() {
+                if (audioPlayer.src) {
+                    audioPlayer.play();
+                } else {
+                    alert('Please generate speech first.');
+                }
+            });
+            
+            // Download audio
+            downloadBtn.addEventListener('click', function() {
+                if (audioData) {
+                    const link = document.createElement('a');
+                    link.href = `data:audio/wav;base64,${audioData}`;
+                    link.download = 'tts_audio.wav';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else {
+                    alert('Please generate speech first.');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

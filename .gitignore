@@ -1,0 +1,25 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Temporary files
+temp_audio/
+voice_samples/
+*.wav
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS specific files
+.DS_Store
+Thumbs.db
