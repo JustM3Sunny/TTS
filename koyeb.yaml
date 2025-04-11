@@ -18,7 +18,5 @@ env:
     value: "8080"
   - name: KOYEB
     value: "true"
-instance_types:
-  - name: nano
 regions:
   - fra
