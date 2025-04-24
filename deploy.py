@@ -4,8 +4,13 @@ import argparse
 import subprocess
 import sys
 import importlib.util
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 REQUIRED_PACKAGES = ["flask", "aiohttp", "pygame", "requests"]
+DEFAULT_DIRECTORIES = ["templates", "static", "temp_audio", "voice_samples"]
 
 
 def check_dependencies(packages=None):
@@ -14,25 +19,33 @@ def check_dependencies(packages=None):
         packages = REQUIRED_PACKAGES
     missing_dependencies = []
     for package in packages:
-        if importlib.util.find_spec(package) is None:
+        try:
+            importlib.import_module(package)  # Use import_module for a more robust check
+        except ImportError:
             missing_dependencies.append(package)
 
     if missing_dependencies:
-        print(f"❌ Missing dependencies: {', '.join(missing_dependencies)}")
-        print("Please install all dependencies with: pip install -r requirements.txt")
+        logging.error(f"❌ Missing dependencies: {', '.join(missing_dependencies)}")
+        logging.info("Please install all dependencies with: pip install -r requirements.txt")
         return False
     else:
-        print("✅ All required dependencies are installed.")
+        logging.info("✅ All required dependencies are installed.")
         return True
 
 
 def create_directories(directories=None):
     """Create necessary directories"""
     if directories is None:
-        directories = ["templates", "static", "temp_audio", "voice_samples"]
+        directories = DEFAULT_DIRECTORIES
     for directory in directories:
-        os.makedirs(directory, exist_ok=True)
-    print("✅ Created necessary directories.")
+        try:
+            os.makedirs(directory, exist_ok=True)
+            logging.info(f"Created directory: {directory}")
+        except OSError as e:
+            logging.error(f"❌ Error creating directory {directory}: {e}")
+            return False
+    logging.info("✅ Created necessary directories.")
+    return True
 
 
 def start_server(host="0.0.0.0", port=5000, debug=False):
@@ -40,17 +53,18 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
     if not check_dependencies():
         sys.exit(1)  # Exit if dependencies are missing
 
-    create_directories()
+    if not create_directories():
+        sys.exit(1)
 
-    print(f"Starting TTS server on http://{host}:{port}")
-    print("Press Ctrl+C to stop the server.")
+    logging.info(f"Starting TTS server on http://{host}:{port}")
+    logging.info("Press Ctrl+C to stop the server.")
 
     # Import here to ensure dependencies are checked first
     try:
         from tts_api import app
     except ImportError as e:
-        print(f"❌ Error importing tts_api: {e}")
-        print("Please ensure tts_api.py exists and is correctly configured.")
+        logging.error(f"❌ Error importing tts_api: {e}")
+        logging.info("Please ensure tts_api.py exists and is correctly configured.")
         sys.exit(1)
 
     # Check if running on Render or similar platform
@@ -84,7 +98,7 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
 
             StandaloneApplication(app, options).run()
         except ImportError:
-            print("Gunicorn is required to run in production. Please install it with: pip install gunicorn")
+            logging.error("Gunicorn is required to run in production. Please install it with: pip install gunicorn")
             sys.exit(1)
 
     else:
@@ -95,14 +109,15 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
 def install_dependencies():
     """Install dependencies using pip."""
     try:
+        logging.info("Installing dependencies from requirements.txt...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-        print("✅ Dependencies installed.")
+        logging.info("✅ Dependencies installed.")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error installing dependencies: {e}")
+        logging.error(f"❌ Error installing dependencies: {e}")
         return False
     except FileNotFoundError:
-        print("❌ requirements.txt not found. Please ensure it exists in the current directory.")
+        logging.error("❌ requirements.txt not found. Please ensure it exists in the current directory.")
         return False
 
 

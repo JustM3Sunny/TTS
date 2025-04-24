@@ -4,8 +4,9 @@ import base64
 import os
 import logging
 import sys
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 import tempfile
+import hashlib
 
 # Try to import pygame, but don't fail if it's not available
 try:
@@ -18,7 +19,7 @@ except ImportError:
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout  # Ensure logs are printed to the console
+    stream=sys.stdout
 )
 logger = logging.getLogger("tts_core")
 if not PYGAME_AVAILABLE:
@@ -45,27 +46,32 @@ class TTSEngine:
     """Core Text-to-Speech engine using Deepgram API"""
 
     DEEPGRAM_API_URL = "https://deepgram.com/api/ttsAudioGeneration"
+    TEMP_FILE_PREFIX = "temp_audio_"
+    TEMP_FILE_SUFFIX = ".wav"
 
-    def __init__(self, default_voice: str = "Asteria", temp_dir: Optional[str] = None):
+    def __init__(self, deepgram_api_key: str, default_voice: str = "Asteria", temp_dir: Optional[str] = None):
         """
         Initialize the TTS Engine
 
         Args:
+            deepgram_api_key: The Deepgram API key.
             default_voice: Default voice to use (must be a key in VOICE_MODELS)
             temp_dir: Directory to store temporary audio files. If None, uses system temp dir.
         """
+        if not deepgram_api_key:
+            raise ValueError("Deepgram API key is required.")
+
         if default_voice not in VOICE_MODELS:
             raise ValueError(f"Invalid default_voice: {default_voice}. Must be one of {list(VOICE_MODELS.keys())}")
 
+        self.deepgram_api_key = deepgram_api_key
         self.default_voice = default_voice
 
         if temp_dir is None:
-            self.temp_dir = tempfile.gettempdir()
+            self.temp_dir = tempfile.mkdtemp(prefix="tts_engine_")  # Create a unique temporary directory
         else:
             self.temp_dir = temp_dir
-
-        # Create temp directory if it doesn't exist
-        os.makedirs(self.temp_dir, exist_ok=True)
+            os.makedirs(self.temp_dir, exist_ok=True)  # Ensure temp_dir exists
 
         # Initialize pygame mixer if available
         if PYGAME_AVAILABLE:
@@ -80,7 +86,9 @@ class TTSEngine:
         Get or create an aiohttp ClientSession.
         """
         if self.http_session is None or self.http_session.closed:
-            self.http_session = aiohttp.ClientSession()
+            self.http_session = aiohttp.ClientSession(
+                headers={"Authorization": f"Bearer {self.deepgram_api_key}"}
+            )
         return self.http_session
 
     def get_available_voices(self) -> Dict[str, str]:
@@ -99,13 +107,11 @@ class TTSEngine:
             Audio data as bytes or None if generation failed
         """
         if not text:
-            logger.warning("Empty text provided")  # Use warning instead of error for non-critical issues
+            logger.warning("Empty text provided")
             return None
 
-        # Use default voice if none specified
         selected_voice = voice or self.default_voice
 
-        # Get the model ID for the selected voice
         if selected_voice not in VOICE_MODELS:
             logger.warning(f"Voice '{selected_voice}' not found, using default '{self.default_voice}'")
             model = VOICE_MODELS[self.default_voice]
@@ -117,25 +123,25 @@ class TTSEngine:
         logger.info(f"Generating audio for text: '{text[:50]}...' using voice: {selected_voice}")
 
         try:
-            async with await self._get_http_session() as session:
-                async with session.post(self.DEEPGRAM_API_URL, json=payload) as response:
-                    if response.status != 200:
-                        error_message = await response.text()
-                        logger.error(f"API request failed with status {response.status}: {error_message}")
-                        return None
+            session = await self._get_http_session()  # Get the session
+            async with session.post(self.DEEPGRAM_API_URL, json=payload) as response:
+                if response.status != 200:
+                    error_message = await response.text()
+                    logger.error(f"API request failed with status {response.status}: {error_message}")
+                    return None
 
-                    result = await response.json()
-                    if 'data' not in result:
-                        logger.error(f"Unexpected API response: {result}")
-                        return None
+                result = await response.json()
+                if 'data' not in result:
+                    logger.error(f"Unexpected API response: {result}")
+                    return None
 
-                    audio_data = result['data']
-                    return base64.b64decode(audio_data)
+                audio_data = result['data']
+                return base64.b64decode(audio_data)
 
         except aiohttp.ClientError as e:
             logger.error(f"API request failed: {e}")
         except Exception as e:
-            logger.exception(f"Unexpected error during audio generation: {e}") # Use exception to log the full stack trace
+            logger.exception(f"Unexpected error during audio generation: {e}")
 
         return None
 
@@ -170,8 +176,9 @@ class TTSEngine:
             logger.warning("Cannot play audio: pygame is not available")
             return False
 
-        # Use a more robust method for creating unique filenames
-        temp_file = os.path.join(self.temp_dir, f"temp_audio_{hash(audio_data)}.wav")
+        # Create a unique filename based on the audio data
+        audio_hash = hashlib.md5(audio_data).hexdigest()
+        temp_file = os.path.join(self.temp_dir, f"{self.TEMP_FILE_PREFIX}{audio_hash}{self.TEMP_FILE_SUFFIX}")
 
         try:
             with open(temp_file, "wb") as f:
@@ -190,7 +197,7 @@ class TTSEngine:
             logger.error(f"Pygame error playing audio: {e}")
             return False
         except Exception as e:
-            logger.exception(f"Error playing audio: {e}") # Log full stack trace
+            logger.exception(f"Error playing audio: {e}")
             return False
 
         finally:
@@ -223,7 +230,7 @@ class TTSEngine:
             logger.info(f"Audio saved to {output_path}")
             return True
         except Exception as e:
-            logger.exception(f"Error saving audio file: {e}") # Log full stack trace
+            logger.exception(f"Error saving audio file: {e}")
             return False
 
     async def close(self):
@@ -235,11 +242,24 @@ class TTSEngine:
         """Clean up resources"""
         if PYGAME_AVAILABLE:
             pygame.mixer.quit()
+        # Clean up the temporary directory
+        import shutil
+        try:
+            shutil.rmtree(self.temp_dir)
+            logger.info(f"Temporary directory {self.temp_dir} removed.")
+        except OSError as e:
+            logger.warning(f"Failed to remove temporary directory {self.temp_dir}: {e}")
 
 
 # Simple test function
 async def test_tts_engine():
-    engine = TTSEngine()
+    # Replace with your actual Deepgram API key
+    deepgram_api_key = os.environ.get("DEEPGRAM_API_KEY")
+    if not deepgram_api_key:
+        print("Please set the DEEPGRAM_API_KEY environment variable.")
+        return
+
+    engine = TTSEngine(deepgram_api_key=deepgram_api_key)
 
     print("Available voices:")
     for name, model in engine.get_available_voices().items():

@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 import os
 import logging
-from tts_api import app
+import sys
+from tts_api import app  # Assuming tts_api is a module/package
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)  # Get a specific logger for this module
 
 # Define directories
 DIRECTORIES = ["templates", "static", "temp_audio", "voice_samples"]
 
+
 def create_directories(directories):
-    """Creates directories if they don't exist."""
+    """Creates directories if they don't exist. Exits if critical directories fail to create."""
     for directory in directories:
         try:
             os.makedirs(directory, exist_ok=True)
-            logging.info(f"Created directory: {directory}")
+            logger.info(f"Created directory: {directory}")
         except OSError as e:
-            logging.error(f"Failed to create directory {directory}: {e}")
-            # Consider exiting if critical directories fail to create
-            # sys.exit(1)
+            logger.error(f"Failed to create directory {directory}: {e}")
+            logger.critical("Failed to create a critical directory. Exiting.")
+            sys.exit(1)  # Exit if directory creation fails
 
 
 if __name__ == "__main__":
@@ -26,11 +29,12 @@ if __name__ == "__main__":
 
     # Get port from environment variable (for Render)
     port = int(os.environ.get("PORT", 5000))
-    logging.info(f"Using port: {port}")
+    logger.info(f"Using port: {port}")
 
-    # Consider using a production WSGI server like gunicorn or uWSGI in production
-    # app.run(host="0.0.0.0", port=port, debug=True) # Debug mode is unsafe for production
+    # Production WSGI server like gunicorn or uWSGI is recommended
+    # For development, we can use the built-in Flask server
     try:
-        app.run(host="0.0.0.0", port=port)
+        app.run(host="0.0.0.0", port=port, debug=False)  # Disable debug mode in production
     except Exception as e:
-        logging.error(f"Application failed to start: {e}")
+        logger.error(f"Application failed to start: {e}")
+        sys.exit(1)

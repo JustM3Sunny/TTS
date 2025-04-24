@@ -9,30 +9,21 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 async def demo_all_voices():
     """Demonstrate all available voices"""
+    output_dir = "voice_samples"
+    os.makedirs(output_dir, exist_ok=True)
+
     try:
         engine = TTSEngine()
-
-        # Create output directory if it doesn't exist
-        output_dir = "voice_samples"
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Get all available voices
         voices = engine.get_available_voices()
-
-        # Sample text to convert to speech
         text = "Hello! This is a demonstration of the text-to-speech platform with different voices."
 
         logging.info("Generating audio samples for all voices...")
 
-        # Generate audio for each voice
-        for voice_name in voices.keys():
+        async def process_voice(voice_name):
             logging.info(f"Processing voice: {voice_name}")
-
-            # Generate and save audio file
             output_path = os.path.join(output_dir, f"{voice_name.lower()}_sample.wav")
             try:
                 success = await engine.save_audio_file(text, output_path, voice_name)
-
                 if success:
                     logging.info(f"  ✓ Audio saved to {output_path}")
                 else:
@@ -40,14 +31,18 @@ async def demo_all_voices():
             except Exception as e:
                 logging.exception(f"An error occurred while processing voice {voice_name}: {e}")
 
+        # Use asyncio.gather to run voice processing concurrently
+        await asyncio.gather(*(process_voice(voice_name) for voice_name in voices.keys()))
+
         logging.info("\nAll voice samples generated!")
         logging.info(f"You can find the audio samples in the '{output_dir}' directory.")
 
     except Exception as e:
         logging.exception(f"An unexpected error occurred in demo_all_voices: {e}")
     finally:
-        if 'engine' in locals():
-            engine.cleanup()
+        if 'engine' in locals() and 'engine' in vars():
+            if engine:
+                engine.cleanup()
 
 
 async def interactive_demo():
@@ -58,13 +53,11 @@ async def interactive_demo():
         print("=== Interactive Text-to-Speech Demo ===")
         print("Available voices:")
 
-        # Get all available voices
         voices = engine.get_available_voices()
-        voice_list = list(voices.keys())  # Store voices in a list for easier indexing
+        voice_list = list(voices.keys())
         for i, name in enumerate(voice_list, 1):
             print(f"{i}. {name}")
 
-        # Get user input
         while True:
             try:
                 voice_index = int(input("\nSelect a voice (number): ")) - 1
@@ -78,42 +71,32 @@ async def interactive_demo():
         voice_name = voice_list[voice_index]
         print(f"Selected voice: {voice_name}")
 
-        # Get text to convert to speech
         text = input("\nEnter text to convert to speech: ")
 
         print(f"\nConverting text to speech using voice '{voice_name}'...")
         print("Playing audio...")
 
-        # Generate and play audio
         try:
-            success = await engine.speak_text(text, voice_name)
-
-            if not success:
-                print("Failed to generate or play audio.")
+            await engine.speak_text(text, voice_name)  # No need to check success, exceptions are handled
         except Exception as e:
             logging.exception(f"An error occurred during audio playback: {e}")
 
-        # Ask if user wants to save the audio
         save_audio = input("\nDo you want to save this audio? (y/n): ").lower()
         if save_audio == 'y':
             output_path = input("Enter output file path (default: output.wav): ") or "output.wav"
 
-            # Generate and save audio file
             try:
-                success = await engine.save_audio_file(text, output_path, voice_name)
-
-                if success:
-                    print(f"Audio saved to {output_path}")
-                else:
-                    print("Failed to save audio.")
+                await engine.save_audio_file(text, output_path, voice_name) # No need to check success, exceptions are handled
+                print(f"Audio saved to {output_path}")
             except Exception as e:
                 logging.exception(f"An error occurred while saving the audio: {e}")
 
     except Exception as e:
         logging.exception(f"An unexpected error occurred in interactive_demo: {e}")
     finally:
-        if 'engine' in locals():
-            engine.cleanup()
+        if 'engine' in locals() and 'engine' in vars():
+            if engine:
+                engine.cleanup()
 
 
 async def main():
