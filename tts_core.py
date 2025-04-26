@@ -7,6 +7,8 @@ import sys
 from typing import Optional, Dict
 import tempfile
 import hashlib
+import shutil  # Moved import here
+import contextlib
 
 # Try to import pygame, but don't fail if it's not available
 try:
@@ -66,16 +68,17 @@ class TTSEngine:
 
         self.deepgram_api_key = deepgram_api_key
         self.default_voice = default_voice
+        self.temp_dir = temp_dir or tempfile.mkdtemp(prefix="tts_engine_")
 
-        if temp_dir is None:
-            self.temp_dir = tempfile.mkdtemp(prefix="tts_engine_")  # Create a unique temporary directory
-        else:
-            self.temp_dir = temp_dir
-            os.makedirs(self.temp_dir, exist_ok=True)  # Ensure temp_dir exists
+        os.makedirs(self.temp_dir, exist_ok=True)  # Ensure temp_dir exists
 
         # Initialize pygame mixer if available
         if PYGAME_AVAILABLE:
-            pygame.mixer.init()
+            try:
+                pygame.mixer.init()
+            except pygame.error as e:
+                logger.error(f"Failed to initialize pygame mixer: {e}")
+                PYGAME_AVAILABLE = False # Disable pygame if initialization fails
         else:
             logger.warning("Audio playback is disabled because pygame is not available.")
 
@@ -125,11 +128,7 @@ class TTSEngine:
         try:
             session = await self._get_http_session()  # Get the session
             async with session.post(self.DEEPGRAM_API_URL, json=payload) as response:
-                if response.status != 200:
-                    error_message = await response.text()
-                    logger.error(f"API request failed with status {response.status}: {error_message}")
-                    return None
-
+                response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
                 result = await response.json()
                 if 'data' not in result:
                     logger.error(f"Unexpected API response: {result}")
@@ -162,6 +161,26 @@ class TTSEngine:
 
         return await self.play_audio(audio_data)
 
+    @contextlib.asynccontextmanager
+    async def _audio_file(self, audio_data: bytes):
+        """
+        Context manager for creating and cleaning up temporary audio files.
+        """
+        audio_hash = hashlib.md5(audio_data).hexdigest()
+        temp_file = os.path.join(self.temp_dir, f"{self.TEMP_FILE_PREFIX}{audio_hash}{self.TEMP_FILE_SUFFIX}")
+
+        try:
+            with open(temp_file, "wb") as f:
+                f.write(audio_data)
+            yield temp_file
+        finally:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except OSError as e:
+                    logger.warning(f"Failed to remove temporary file {temp_file}: {e}")
+
+
     async def play_audio(self, audio_data: bytes) -> bool:
         """
         Play audio data using pygame if available
@@ -176,20 +195,14 @@ class TTSEngine:
             logger.warning("Cannot play audio: pygame is not available")
             return False
 
-        # Create a unique filename based on the audio data
-        audio_hash = hashlib.md5(audio_data).hexdigest()
-        temp_file = os.path.join(self.temp_dir, f"{self.TEMP_FILE_PREFIX}{audio_hash}{self.TEMP_FILE_SUFFIX}")
-
         try:
-            with open(temp_file, "wb") as f:
-                f.write(audio_data)
+            async with self._audio_file(audio_data) as temp_file:
+                sound = pygame.mixer.Sound(temp_file)
+                sound.play()
 
-            sound = pygame.mixer.Sound(temp_file)
-            sound.play()
-
-            # Wait for the audio to finish playing
-            while pygame.mixer.get_busy():
-                await asyncio.sleep(0.1)
+                # Wait for the audio to finish playing
+                while pygame.mixer.get_busy():
+                    await asyncio.sleep(0.1)
 
             return True
 
@@ -200,13 +213,6 @@ class TTSEngine:
             logger.exception(f"Error playing audio: {e}")
             return False
 
-        finally:
-            # Clean up the temporary file
-            if os.path.exists(temp_file):
-                try:
-                    os.remove(temp_file)
-                except OSError as e:
-                    logger.warning(f"Failed to remove temporary file {temp_file}: {e}")
 
     async def save_audio_file(self, text: str, output_path: str, voice: Optional[str] = None) -> bool:
         """
@@ -243,7 +249,6 @@ class TTSEngine:
         if PYGAME_AVAILABLE:
             pygame.mixer.quit()
         # Clean up the temporary directory
-        import shutil
         try:
             shutil.rmtree(self.temp_dir)
             logger.info(f"Temporary directory {self.temp_dir} removed.")

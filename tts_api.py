@@ -6,6 +6,8 @@ import logging
 import base64
 from tts_core import TTSEngine, VOICE_MODELS
 from functools import wraps
+from typing import Optional, Tuple
+from werkzeug.exceptions import BadRequest, InternalServerError
 
 # Configure logging
 logging.basicConfig(
@@ -26,9 +28,10 @@ def handle_exceptions(f):
             return await f(*args, **kwargs)
         except Exception as e:
             logger.exception(f"Error in {f.__name__}")
+            # Consider returning a more generic error message for security
             return jsonify({
                 "success": False,
-                "error": str(e)
+                "error": "An unexpected error occurred."
             }), 500
     return wrapper
 
@@ -48,22 +51,37 @@ def get_voices():
     })
 
 
+def validate_tts_request(data: dict) -> Optional[Tuple[str, int]]:
+    """Validates the TTS request data."""
+    if not data or 'text' not in data:
+        return "Missing required parameter: text", 400
+    if not isinstance(data['text'], str):
+        return "Text must be a string", 400
+    return None
+
+
 @app.route('/api/tts', methods=['POST'])
 @handle_exceptions
 async def text_to_speech():
     """Convert text to speech and return audio file"""
     data = request.get_json()
 
-    if not data or 'text' not in data:
+    validation_error = validate_tts_request(data)
+    if validation_error:
+        error_message, status_code = validation_error
         return jsonify({
             "success": False,
-            "error": "Missing required parameter: text"
-        }), 400
+            "error": error_message
+        }), status_code
 
     text = data['text']
     voice = data.get('voice')
 
-    audio_data = await tts_engine.generate_audio(text, voice)
+    try:
+        audio_data = await tts_engine.generate_audio(text, voice)
+    except Exception as e:
+        logger.exception("Error generating audio")
+        raise InternalServerError("Failed to generate audio") from e
 
     if not audio_data:
         return jsonify({
@@ -89,16 +107,22 @@ async def text_to_speech_base64():
 
     data = request.get_json()
 
-    if not data or 'text' not in data:
+    validation_error = validate_tts_request(data)
+    if validation_error:
+        error_message, status_code = validation_error
         return jsonify({
             "success": False,
-            "error": "Missing required parameter: text"
-        }), 400
+            "error": error_message
+        }), status_code
 
     text = data['text']
     voice = data.get('voice')
 
-    audio_data = await tts_engine.generate_audio(text, voice)
+    try:
+        audio_data = await tts_engine.generate_audio(text, voice)
+    except Exception as e:
+        logger.exception("Error generating audio")
+        raise InternalServerError("Failed to generate audio") from e
 
     if not audio_data:
         return jsonify({
@@ -121,16 +145,22 @@ async def speak():
     """Play audio on the server (for testing purposes)"""
     data = request.get_json()
 
-    if not data or 'text' not in data:
+    validation_error = validate_tts_request(data)
+    if validation_error:
+        error_message, status_code = validation_error
         return jsonify({
             "success": False,
-            "error": "Missing required parameter: text"
-        }), 400
+            "error": error_message
+        }), status_code
 
     text = data['text']
     voice = data.get('voice')
 
-    success = await tts_engine.speak_text(text, voice)
+    try:
+        success = await tts_engine.speak_text(text, voice)
+    except Exception as e:
+        logger.exception("Error speaking text")
+        raise InternalServerError("Failed to generate or play audio") from e
 
     if not success:
         return jsonify({
@@ -155,6 +185,7 @@ def not_found(e):
 @app.errorhandler(500)
 def server_error(e):
     logger.exception("Internal Server Error")
+    # Consider returning a more generic error message for security
     return jsonify({
         "success": False,
         "error": "Internal server error"

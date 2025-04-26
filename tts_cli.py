@@ -46,9 +46,13 @@ async def main():
             except FileNotFoundError:
                 logging.error(f"File not found: {args.file}")
                 return
-            except Exception as e:
+            except OSError as e:  # More specific exception
                 logging.error(f"Error reading file: {e}")
                 return
+
+        if not text:
+            logging.error("No text provided. Please use --text or --file.")
+            return
 
         # Check if voice is valid
         if args.voice not in VOICE_MODELS:
@@ -56,33 +60,34 @@ async def main():
             return
 
         # Convert text to speech
-        if args.output:
-            # Save to file
-            logging.info(f"Converting text to speech using voice '{args.voice}' and saving to '{args.output}'...")
-            try:
+        try:
+            if args.output:
+                # Save to file
+                logging.info(f"Converting text to speech using voice '{args.voice}' and saving to '{args.output}'...")
                 success = await engine.save_audio_file(text, args.output, args.voice)
 
                 if success:
                     logging.info(f"Audio saved to {args.output}")
                 else:
                     logging.error("Failed to generate or save audio.")
-            except Exception as e:
-                logging.exception("An unexpected error occurred during audio saving:")
 
-        else:
-            # Play audio
-            logging.info(f"Converting text to speech using voice '{args.voice}' and playing audio...")
-            try:
+            else:
+                # Play audio
+                logging.info(f"Converting text to speech using voice '{args.voice}' and playing audio...")
                 success = await engine.speak_text(text, args.voice)
 
                 if not success:
                     logging.error("Failed to generate or play audio.")
-            except Exception as e:
-                logging.exception("An unexpected error occurred during audio playback:")
+        except Exception as e:
+            logging.exception("An unexpected error occurred during audio processing:")
 
     finally:
         # Clean up resources
-        await engine.cleanup()  # Await the cleanup, assuming it's async
+        try:
+            await engine.cleanup()  # Await the cleanup, assuming it's async
+        except Exception as e:
+            logging.exception(f"Error during cleanup: {e}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

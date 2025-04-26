@@ -2,7 +2,7 @@
 import asyncio
 import os
 import logging
-from tts_core import TTSEngine
+from tts_core import TTSEngine  # Assuming this is a custom module
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -12,6 +12,7 @@ async def demo_all_voices():
     output_dir = "voice_samples"
     os.makedirs(output_dir, exist_ok=True)
 
+    engine = None  # Initialize engine outside the try block
     try:
         engine = TTSEngine()
         voices = engine.get_available_voices()
@@ -23,11 +24,8 @@ async def demo_all_voices():
             logging.info(f"Processing voice: {voice_name}")
             output_path = os.path.join(output_dir, f"{voice_name.lower()}_sample.wav")
             try:
-                success = await engine.save_audio_file(text, output_path, voice_name)
-                if success:
-                    logging.info(f"  ✓ Audio saved to {output_path}")
-                else:
-                    logging.error(f"  ✗ Failed to generate audio for {voice_name}")
+                await engine.save_audio_file(text, output_path, voice_name)
+                logging.info(f"  ✓ Audio saved to {output_path}")
             except Exception as e:
                 logging.exception(f"An error occurred while processing voice {voice_name}: {e}")
 
@@ -40,13 +38,13 @@ async def demo_all_voices():
     except Exception as e:
         logging.exception(f"An unexpected error occurred in demo_all_voices: {e}")
     finally:
-        if 'engine' in locals() and 'engine' in vars():
-            if engine:
-                engine.cleanup()
+        if engine:
+            engine.cleanup()
 
 
 async def interactive_demo():
     """Interactive demonstration of the TTS engine"""
+    engine = None # Initialize engine outside the try block
     try:
         engine = TTSEngine()
 
@@ -77,7 +75,7 @@ async def interactive_demo():
         print("Playing audio...")
 
         try:
-            await engine.speak_text(text, voice_name)  # No need to check success, exceptions are handled
+            await engine.speak_text(text, voice_name)  # Exceptions are handled
         except Exception as e:
             logging.exception(f"An error occurred during audio playback: {e}")
 
@@ -86,7 +84,7 @@ async def interactive_demo():
             output_path = input("Enter output file path (default: output.wav): ") or "output.wav"
 
             try:
-                await engine.save_audio_file(text, output_path, voice_name) # No need to check success, exceptions are handled
+                await engine.save_audio_file(text, output_path, voice_name) # Exceptions are handled
                 print(f"Audio saved to {output_path}")
             except Exception as e:
                 logging.exception(f"An error occurred while saving the audio: {e}")
@@ -94,9 +92,8 @@ async def interactive_demo():
     except Exception as e:
         logging.exception(f"An unexpected error occurred in interactive_demo: {e}")
     finally:
-        if 'engine' in locals() and 'engine' in vars():
-            if engine:
-                engine.cleanup()
+        if engine:
+            engine.cleanup()
 
 
 async def main():

@@ -2,6 +2,7 @@
 import os
 import logging
 import sys
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,8 +14,9 @@ DIRECTORIES = ["templates", "static", "temp_audio", "voice_samples"]
 def create_directories(directories):
     """Creates directories if they don't exist."""
     for directory in directories:
+        path = Path(directory)
         try:
-            os.makedirs(directory, exist_ok=True)
+            path.mkdir(parents=True, exist_ok=True)
             logging.info(f"Created directory: {directory}")
         except OSError as e:
             logging.error(f"Error creating directory {directory}: {e}")
@@ -32,7 +34,8 @@ def main():
         # Get port from environment variable (for Render)
         port = int(os.environ.get("PORT", 5000))
         logging.info(f"Starting app on port: {port}")
-        app.run(host="0.0.0.0", port=port, debug=False)  # Disable debug mode in production
+        # Consider using a configuration object or environment variables for host
+        app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG", "False") == "True")
     except ImportError as e:
         logging.critical(f"Failed to import tts_api: {e}")
         sys.exit(1)

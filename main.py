@@ -28,7 +28,13 @@ if __name__ == "__main__":
     create_directories(DIRECTORIES)
 
     # Get port from environment variable (for Render)
-    port = int(os.environ.get("PORT", 5000))
+    port = os.environ.get("PORT", 5000)
+    try:
+        port = int(port)
+    except ValueError:
+        logger.error(f"Invalid port value: {port}.  Using default port 5000.")
+        port = 5000
+
     logger.info(f"Using port: {port}")
 
     # Production WSGI server like gunicorn or uWSGI is recommended
@@ -36,5 +42,5 @@ if __name__ == "__main__":
     try:
         app.run(host="0.0.0.0", port=port, debug=False)  # Disable debug mode in production
     except Exception as e:
-        logger.error(f"Application failed to start: {e}")
+        logger.exception("Application failed to start.") # Log the full exception traceback
         sys.exit(1)

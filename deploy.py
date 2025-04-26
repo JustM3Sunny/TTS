@@ -5,12 +5,14 @@ import subprocess
 import sys
 import importlib.util
 import logging
+import venv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 REQUIRED_PACKAGES = ["flask", "aiohttp", "pygame", "requests"]
 DEFAULT_DIRECTORIES = ["templates", "static", "temp_audio", "voice_samples"]
+VENV_DIR = "venv"
 
 
 def check_dependencies(packages=None):
@@ -51,9 +53,11 @@ def create_directories(directories=None):
 def start_server(host="0.0.0.0", port=5000, debug=False):
     """Start the TTS API server"""
     if not check_dependencies():
+        logging.error("Dependencies are missing. Exiting.")
         sys.exit(1)  # Exit if dependencies are missing
 
     if not create_directories():
+        logging.error("Failed to create directories. Exiting.")
         sys.exit(1)
 
     logging.info(f"Starting TTS server on http://{host}:{port}")
@@ -110,7 +114,9 @@ def install_dependencies():
     """Install dependencies using pip."""
     try:
         logging.info("Installing dependencies from requirements.txt...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        # Use the venv's pip if a virtual environment is active
+        pip_executable = [sys.executable, "-m", "pip"]
+        subprocess.check_call(pip_executable + ["install", "-r", "requirements.txt"])
         logging.info("✅ Dependencies installed.")
         return True
     except subprocess.CalledProcessError as e:
@@ -118,6 +124,18 @@ def install_dependencies():
         return False
     except FileNotFoundError:
         logging.error("❌ requirements.txt not found. Please ensure it exists in the current directory.")
+        return False
+
+
+def create_virtual_environment():
+    """Creates a virtual environment."""
+    try:
+        logging.info(f"Creating virtual environment in {VENV_DIR}...")
+        venv.create(VENV_DIR, with_pip=True)
+        logging.info(f"✅ Virtual environment created in {VENV_DIR}.")
+        return True
+    except Exception as e:
+        logging.error(f"❌ Error creating virtual environment: {e}")
         return False
 
 
@@ -133,8 +151,16 @@ def main():
                         help="Run the server in debug mode")
     parser.add_argument("--install", action="store_true",
                         help="Install dependencies")
+    parser.add_argument("--venv", action="store_true",
+                        help="Create a virtual environment")
 
     args = parser.parse_args()
+
+    if args.venv:
+        if not create_virtual_environment():
+            sys.exit(1)
+        print(f"Please activate the virtual environment using:\nsource {VENV_DIR}/bin/activate (Linux/macOS)\n{VENV_DIR}\\Scripts\\activate (Windows)")
+        sys.exit(0)
 
     if args.install:
         if not install_dependencies():
