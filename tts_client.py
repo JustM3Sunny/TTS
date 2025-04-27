@@ -53,32 +53,21 @@ class TTSClient:
         try:
             session = await self._get_session()
             async with session.get(f"{self.api_url}/api/voices") as response:
-                return await self._process_voice_response(response)
-        except ClientError as e:
-            logger.error(f"Error getting voices: {e}")
+                response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+                data = await response.json()
+                if data.get("success", False) and "voices" in data:
+                    return data["voices"]
+                else:
+                    logger.error(f"Invalid response from API: {data}")
+                    return {}
+        except aiohttp.ClientResponseError as e:
+            logger.error(f"API request failed: {e.status} - {e.message}")
             return {}
-        except Exception as e:
-            logger.exception("Unexpected error getting voices")  # Log full traceback
-            return {}
-
-    async def _process_voice_response(self, response: ClientResponse) -> Dict[str, str]:
-        """Helper function to process the API response for voices."""
-        if response.status != 200:
-            logger.error(f"Failed to get voices: {response.status}")
-            return {}
-
-        try:
-            data = await response.json()
-            if data.get("success", False) and "voices" in data:
-                return data["voices"]
-            else:
-                logger.error(f"Invalid response from API: {data}")
-                return {}
         except ContentTypeError:
             logger.error("Invalid JSON response received")
             return {}
         except Exception as e:
-            logger.exception("Unexpected error processing voice response")
+            logger.exception("Unexpected error getting voices")  # Log full traceback
             return {}
 
     async def text_to_speech(self, text: str, voice: Optional[str] = None) -> Optional[bytes]:
@@ -103,25 +92,13 @@ class TTSClient:
         try:
             session = await self._get_session()
             async with session.post(f"{self.api_url}/api/tts", json=payload) as response:
-                return await self._process_tts_response(response)
-        except ClientError as e:
-            logger.error(f"API request failed: {e}")
+                response.raise_for_status()
+                return await response.read()
+        except aiohttp.ClientResponseError as e:
+            logger.error(f"API request failed: {e.status} - {e.message}")
             return None
         except Exception as e:
             logger.exception("Unexpected error in text_to_speech")
-            return None
-
-    async def _process_tts_response(self, response: ClientResponse) -> Optional[bytes]:
-        """Helper function to process the API response for TTS."""
-        if response.status != 200:
-            error_text = await response.text()
-            logger.error(f"API request failed with status {response.status}: {error_text}")
-            return None
-
-        try:
-            return await response.read()
-        except Exception as e:
-            logger.exception("Error reading TTS response")
             return None
 
     async def text_to_speech_base64(self, text: str, voice: Optional[str] = None) -> Optional[str]:
@@ -146,33 +123,21 @@ class TTSClient:
         try:
             session = await self._get_session()
             async with session.post(f"{self.api_url}/api/tts/base64", json=payload) as response:
-                return await self._process_tts_base64_response(response)
-        except ClientError as e:
-            logger.error(f"API request failed: {e}")
+                response.raise_for_status()
+                data = await response.json()
+                if data.get("success", False) and "audio_data" in data:
+                    return data["audio_data"]
+                else:
+                    logger.error(f"Invalid response from API: {data}")
+                    return None
+        except aiohttp.ClientResponseError as e:
+            logger.error(f"API request failed: {e.status} - {e.message}")
             return None
-        except Exception as e:
-            logger.exception("Unexpected error in text_to_speech_base64")
-            return None
-
-    async def _process_tts_base64_response(self, response: ClientResponse) -> Optional[str]:
-        """Helper function to process the API response for base64 TTS."""
-        if response.status != 200:
-            error_text = await response.text()
-            logger.error(f"API request failed with status {response.status}: {error_text}")
-            return None
-
-        try:
-            data = await response.json()
-            if data.get("success", False) and "audio_data" in data:
-                return data["audio_data"]
-            else:
-                logger.error(f"Invalid response from API: {data}")
-                return None
         except ContentTypeError:
             logger.error("Invalid JSON response received")
             return None
         except Exception as e:
-            logger.exception("Unexpected error processing base64 TTS response")
+            logger.exception("Unexpected error in text_to_speech_base64")
             return None
 
     async def save_audio_file(self, text: str, output_path: str, voice: Optional[str] = None) -> bool:
@@ -187,11 +152,11 @@ class TTSClient:
         Returns:
             True if successful, False otherwise
         """
-        audio_data = await self.text_to_speech(text, voice)
-        if not audio_data:
-            return False
-
         try:
+            audio_data = await self.text_to_speech(text, voice)
+            if not audio_data:
+                return False
+
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._write_audio_file, output_path, audio_data)
             logger.info(f"Audio saved to {output_path}")

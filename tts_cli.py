@@ -9,6 +9,26 @@ from tts_core import TTSEngine, VOICE_MODELS
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+async def get_text_from_file(file_path: str) -> str | None:
+    """
+    Reads text from a file. Handles potential errors gracefully.
+
+    Args:
+        file_path: The path to the text file.
+
+    Returns:
+        The text content of the file, or None if an error occurred.
+    """
+    try:
+        async with asyncio.to_thread(open, file_path, 'r', encoding='utf-8') as f:
+            return await asyncio.to_thread(f.read)
+    except FileNotFoundError:
+        logging.error(f"File not found: {file_path}")
+        return None
+    except OSError as e:
+        logging.error(f"Error reading file: {e}")
+        return None
+
 
 async def main():
     parser = argparse.ArgumentParser(description="Text-to-Speech Command Line Interface")
@@ -40,15 +60,7 @@ async def main():
         if args.text:
             text = args.text
         elif args.file:
-            try:
-                with open(args.file, 'r', encoding='utf-8') as f:
-                    text = f.read()
-            except FileNotFoundError:
-                logging.error(f"File not found: {args.file}")
-                return
-            except OSError as e:  # More specific exception
-                logging.error(f"Error reading file: {e}")
-                return
+            text = await get_text_from_file(args.file)
 
         if not text:
             logging.error("No text provided. Please use --text or --file.")

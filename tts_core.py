@@ -7,15 +7,21 @@ import sys
 from typing import Optional, Dict
 import tempfile
 import hashlib
-import shutil  # Moved import here
+import shutil
 import contextlib
 
 # Try to import pygame, but don't fail if it's not available
 try:
     import pygame
+    pygame.mixer.pre_init(44100, -16, 2, 2048)  # Initialize mixer early
+    pygame.init()
     PYGAME_AVAILABLE = True
 except ImportError:
     PYGAME_AVAILABLE = False
+except pygame.error as e:
+    PYGAME_AVAILABLE = False
+    print(f"Pygame initialization error: {e}")
+
 
 # Configure logging
 logging.basicConfig(
@@ -47,7 +53,7 @@ VOICE_MODELS = {
 class TTSEngine:
     """Core Text-to-Speech engine using Deepgram API"""
 
-    DEEPGRAM_API_URL = "https://deepgram.com/api/ttsAudioGeneration"
+    DEEPGRAM_API_URL = "https://api.deepgram.com/v1/speak"  # Updated API endpoint
     TEMP_FILE_PREFIX = "temp_audio_"
     TEMP_FILE_SUFFIX = ".wav"
 
@@ -73,12 +79,15 @@ class TTSEngine:
         os.makedirs(self.temp_dir, exist_ok=True)  # Ensure temp_dir exists
 
         # Initialize pygame mixer if available
+        self.pygame_initialized = False
         if PYGAME_AVAILABLE:
             try:
-                pygame.mixer.init()
+                # pygame.mixer.init()  # Already initialized during import
+                self.pygame_initialized = True
             except pygame.error as e:
                 logger.error(f"Failed to initialize pygame mixer: {e}")
                 PYGAME_AVAILABLE = False # Disable pygame if initialization fails
+                self.pygame_initialized = False
         else:
             logger.warning("Audio playback is disabled because pygame is not available.")
 
@@ -90,7 +99,8 @@ class TTSEngine:
         """
         if self.http_session is None or self.http_session.closed:
             self.http_session = aiohttp.ClientSession(
-                headers={"Authorization": f"Bearer {self.deepgram_api_key}"}
+                headers={"Authorization": f"Bearer {self.deepgram_api_key}",
+                         "Content-Type": "application/json"}  # Explicit content type
             )
         return self.http_session
 
@@ -121,7 +131,7 @@ class TTSEngine:
         else:
             model = VOICE_MODELS[selected_voice]
 
-        payload = {"text": text, "model": model}
+        payload = {"text": text, "voice": model}  # Correct payload format for Deepgram Speak API
 
         logger.info(f"Generating audio for text: '{text[:50]}...' using voice: {selected_voice}")
 
@@ -129,13 +139,8 @@ class TTSEngine:
             session = await self._get_http_session()  # Get the session
             async with session.post(self.DEEPGRAM_API_URL, json=payload) as response:
                 response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-                result = await response.json()
-                if 'data' not in result:
-                    logger.error(f"Unexpected API response: {result}")
-                    return None
-
-                audio_data = result['data']
-                return base64.b64decode(audio_data)
+                audio_data = await response.read()  # Get raw audio data directly
+                return audio_data
 
         except aiohttp.ClientError as e:
             logger.error(f"API request failed: {e}")
@@ -174,6 +179,7 @@ class TTSEngine:
                 f.write(audio_data)
             yield temp_file
         finally:
+            # Ensure cleanup even if there's an exception in the 'with' block
             if os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
@@ -191,24 +197,25 @@ class TTSEngine:
         Returns:
             True if successful, False otherwise
         """
-        if not PYGAME_AVAILABLE:
-            logger.warning("Cannot play audio: pygame is not available")
+        if not PYGAME_AVAILABLE or not self.pygame_initialized:
+            logger.warning("Cannot play audio: pygame is not available or initialized")
             return False
 
         try:
             async with self._audio_file(audio_data) as temp_file:
-                sound = pygame.mixer.Sound(temp_file)
-                sound.play()
+                try:
+                    sound = pygame.mixer.Sound(temp_file)
+                    sound.play()
 
-                # Wait for the audio to finish playing
-                while pygame.mixer.get_busy():
-                    await asyncio.sleep(0.1)
+                    # Wait for the audio to finish playing
+                    while pygame.mixer.get_busy():
+                        await asyncio.sleep(0.1)
+                    return True
+                except pygame.error as e:
+                    logger.error(f"Pygame error playing audio: {e}")
+                    return False
 
-            return True
 
-        except pygame.error as e:
-            logger.error(f"Pygame error playing audio: {e}")
-            return False
         except Exception as e:
             logger.exception(f"Error playing audio: {e}")
             return False
@@ -246,7 +253,7 @@ class TTSEngine:
 
     def cleanup(self):
         """Clean up resources"""
-        if PYGAME_AVAILABLE:
+        if PYGAME_AVAILABLE and self.pygame_initialized:
             pygame.mixer.quit()
         # Clean up the temporary directory
         try:

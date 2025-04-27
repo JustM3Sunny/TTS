@@ -3,6 +3,7 @@ import asyncio
 import os
 import logging
 from tts_core import TTSEngine  # Assuming this is a custom module
+from concurrent.futures import ThreadPoolExecutor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -12,7 +13,7 @@ async def demo_all_voices():
     output_dir = "voice_samples"
     os.makedirs(output_dir, exist_ok=True)
 
-    engine = None  # Initialize engine outside the try block
+    engine = None
     try:
         engine = TTSEngine()
         voices = engine.get_available_voices()
@@ -24,7 +25,11 @@ async def demo_all_voices():
             logging.info(f"Processing voice: {voice_name}")
             output_path = os.path.join(output_dir, f"{voice_name.lower()}_sample.wav")
             try:
-                await engine.save_audio_file(text, output_path, voice_name)
+                # Use run_in_executor to avoid blocking the event loop if save_audio_file is CPU-bound
+                await asyncio.get_running_loop().run_in_executor(
+                    None,  # Use the default thread pool
+                    lambda: asyncio.run(engine.save_audio_file(text, output_path, voice_name))
+                )
                 logging.info(f"  ✓ Audio saved to {output_path}")
             except Exception as e:
                 logging.exception(f"An error occurred while processing voice {voice_name}: {e}")
@@ -44,7 +49,7 @@ async def demo_all_voices():
 
 async def interactive_demo():
     """Interactive demonstration of the TTS engine"""
-    engine = None # Initialize engine outside the try block
+    engine = None
     try:
         engine = TTSEngine()
 
@@ -75,7 +80,11 @@ async def interactive_demo():
         print("Playing audio...")
 
         try:
-            await engine.speak_text(text, voice_name)  # Exceptions are handled
+            # Use run_in_executor to avoid blocking the event loop if speak_text is CPU-bound
+            await asyncio.get_running_loop().run_in_executor(
+                None,  # Use the default thread pool
+                lambda: asyncio.run(engine.speak_text(text, voice_name))
+            )
         except Exception as e:
             logging.exception(f"An error occurred during audio playback: {e}")
 
@@ -84,7 +93,11 @@ async def interactive_demo():
             output_path = input("Enter output file path (default: output.wav): ") or "output.wav"
 
             try:
-                await engine.save_audio_file(text, output_path, voice_name) # Exceptions are handled
+                # Use run_in_executor to avoid blocking the event loop if save_audio_file is CPU-bound
+                await asyncio.get_running_loop().run_in_executor(
+                    None,  # Use the default thread pool
+                    lambda: asyncio.run(engine.save_audio_file(text, output_path, voice_name))
+                )
                 print(f"Audio saved to {output_path}")
             except Exception as e:
                 logging.exception(f"An error occurred while saving the audio: {e}")

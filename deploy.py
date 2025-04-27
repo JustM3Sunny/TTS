@@ -6,6 +6,7 @@ import sys
 import importlib.util
 import logging
 import venv
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,6 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 REQUIRED_PACKAGES = ["flask", "aiohttp", "pygame", "requests"]
 DEFAULT_DIRECTORIES = ["templates", "static", "temp_audio", "voice_samples"]
 VENV_DIR = "venv"
+REQUIREMENTS_FILE = "requirements.txt"
 
 
 def check_dependencies(packages=None):
@@ -22,13 +24,14 @@ def check_dependencies(packages=None):
     missing_dependencies = []
     for package in packages:
         try:
-            importlib.import_module(package)  # Use import_module for a more robust check
+            # Attempt to import the top-level package name only
+            importlib.import_module(package.split('.')[0])
         except ImportError:
             missing_dependencies.append(package)
 
     if missing_dependencies:
         logging.error(f"❌ Missing dependencies: {', '.join(missing_dependencies)}")
-        logging.info("Please install all dependencies with: pip install -r requirements.txt")
+        logging.info(f"Please install all dependencies with: pip install -r {REQUIREMENTS_FILE}")
         return False
     else:
         logging.info("✅ All required dependencies are installed.")
@@ -116,14 +119,14 @@ def install_dependencies():
         logging.info("Installing dependencies from requirements.txt...")
         # Use the venv's pip if a virtual environment is active
         pip_executable = [sys.executable, "-m", "pip"]
-        subprocess.check_call(pip_executable + ["install", "-r", "requirements.txt"])
+        subprocess.check_call(pip_executable + ["install", "-r", REQUIREMENTS_FILE])
         logging.info("✅ Dependencies installed.")
         return True
     except subprocess.CalledProcessError as e:
         logging.error(f"❌ Error installing dependencies: {e}")
         return False
     except FileNotFoundError:
-        logging.error("❌ requirements.txt not found. Please ensure it exists in the current directory.")
+        logging.error(f"❌ {REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")
         return False
 
 
@@ -136,6 +139,12 @@ def create_virtual_environment():
         return True
     except Exception as e:
         logging.error(f"❌ Error creating virtual environment: {e}")
+        # Attempt to remove the directory if creation fails
+        try:
+            shutil.rmtree(VENV_DIR)
+            logging.info(f"Removed partially created virtual environment directory: {VENV_DIR}")
+        except OSError as remove_error:
+            logging.warning(f"Failed to remove partially created virtual environment directory: {remove_error}")
         return False
 
 
@@ -153,10 +162,15 @@ def main():
                         help="Install dependencies")
     parser.add_argument("--venv", action="store_true",
                         help="Create a virtual environment")
+    parser.add_argument("--no-check-deps", action="store_true",
+                        help="Skip dependency check (useful for CI/CD or when dependencies are managed externally)")
 
     args = parser.parse_args()
 
     if args.venv:
+        if os.path.exists(VENV_DIR):
+            logging.warning(f"Virtual environment directory '{VENV_DIR}' already exists.  Please remove it or choose a different directory.")
+            sys.exit(1)
         if not create_virtual_environment():
             sys.exit(1)
         print(f"Please activate the virtual environment using:\nsource {VENV_DIR}/bin/activate (Linux/macOS)\n{VENV_DIR}\\Scripts\\activate (Windows)")
@@ -164,6 +178,10 @@ def main():
 
     if args.install:
         if not install_dependencies():
+            sys.exit(1)
+
+    if not args.no_check_deps:
+        if not check_dependencies():
             sys.exit(1)
 
     start_server(args.host, args.port, args.debug)

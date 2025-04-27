@@ -3,6 +3,10 @@ import os
 import logging
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,6 +24,7 @@ def create_directories(directories):
             logging.info(f"Created directory: {directory}")
         except OSError as e:
             logging.error(f"Error creating directory {directory}: {e}")
+            logging.error(f"The program will now exit.")
             sys.exit(1)  # Exit the program if directory creation fails
 
 
@@ -31,16 +36,21 @@ def main():
         # Import the Flask app (moved inside main to avoid circular import issues)
         from tts_api import app
 
-        # Get port from environment variable (for Render)
+        # Get configuration values from environment variables
         port = int(os.environ.get("PORT", 5000))
-        logging.info(f"Starting app on port: {port}")
-        # Consider using a configuration object or environment variables for host
-        app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG", "False") == "True")
+        host = os.environ.get("HOST", "0.0.0.0")  # Default host
+        debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+
+        logging.info(f"Starting app on {host}:{port} in {'debug' if debug else 'production'} mode.")
+        app.run(host=host, port=port, debug=debug)
+
     except ImportError as e:
         logging.critical(f"Failed to import tts_api: {e}")
+        logging.critical(f"The program will now exit.")
         sys.exit(1)
     except Exception as e:
         logging.critical(f"Application failed to start: {e}")
+        logging.critical(f"The program will now exit.")
         sys.exit(1)
 
 

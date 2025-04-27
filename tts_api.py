@@ -6,8 +6,9 @@ import logging
 import base64
 from tts_core import TTSEngine, VOICE_MODELS
 from functools import wraps
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from werkzeug.exceptions import BadRequest, InternalServerError
+from werkzeug.utils import secure_filename
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +20,10 @@ logger = logging.getLogger("tts_api")
 app = Flask(__name__)
 tts_engine = TTSEngine(temp_dir="./temp_audio")
 
+# Configuration
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit for requests
+ALLOWED_EXTENSIONS = {'txt'}
+
 
 # Decorator for handling exceptions in async routes
 def handle_exceptions(f):
@@ -27,8 +32,7 @@ def handle_exceptions(f):
         try:
             return await f(*args, **kwargs)
         except Exception as e:
-            logger.exception(f"Error in {f.__name__}")
-            # Consider returning a more generic error message for security
+            logger.exception(f"Error in {f.__name__}: {e}")
             return jsonify({
                 "success": False,
                 "error": "An unexpected error occurred."
@@ -51,12 +55,17 @@ def get_voices():
     })
 
 
-def validate_tts_request(data: dict) -> Optional[Tuple[str, int]]:
+def validate_tts_request(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
     """Validates the TTS request data."""
     if not data or 'text' not in data:
         return "Missing required parameter: text", 400
     if not isinstance(data['text'], str):
         return "Text must be a string", 400
+    text = data['text']
+    if not text.strip():
+        return "Text cannot be empty or contain only whitespace", 400
+    if len(text) > 1000:  # Limit text length to prevent abuse
+        return "Text too long. Maximum length is 1000 characters.", 400
     return None
 
 
@@ -81,7 +90,10 @@ async def text_to_speech():
         audio_data = await tts_engine.generate_audio(text, voice)
     except Exception as e:
         logger.exception("Error generating audio")
-        raise InternalServerError("Failed to generate audio") from e
+        return jsonify({
+            "success": False,
+            "error": "Failed to generate audio"
+        }), 500
 
     if not audio_data:
         return jsonify({
@@ -122,7 +134,10 @@ async def text_to_speech_base64():
         audio_data = await tts_engine.generate_audio(text, voice)
     except Exception as e:
         logger.exception("Error generating audio")
-        raise InternalServerError("Failed to generate audio") from e
+        return jsonify({
+            "success": False,
+            "error": "Failed to generate audio"
+        }), 500
 
     if not audio_data:
         return jsonify({
@@ -160,7 +175,10 @@ async def speak():
         success = await tts_engine.speak_text(text, voice)
     except Exception as e:
         logger.exception("Error speaking text")
-        raise InternalServerError("Failed to generate or play audio") from e
+        return jsonify({
+            "success": False,
+            "error": "Failed to generate or play audio"
+        }), 500
 
     if not success:
         return jsonify({
@@ -185,11 +203,69 @@ def not_found(e):
 @app.errorhandler(500)
 def server_error(e):
     logger.exception("Internal Server Error")
-    # Consider returning a more generic error message for security
     return jsonify({
         "success": False,
         "error": "Internal server error"
     }), 500
+
+
+@app.route('/api/upload', methods=['POST'])
+@handle_exceptions
+async def upload_text():
+    """Upload a text file and convert it to speech."""
+    if 'file' not in request.files:
+        return jsonify({"success": False, "error": "No file part"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "error": "No selected file"}), 400
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        try:
+            text = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            return jsonify({"success": False, "error": "Failed to decode file.  Please ensure it is UTF-8 encoded."}), 400
+
+        data = {'text': text}
+        validation_error = validate_tts_request(data)
+        if validation_error:
+            error_message, status_code = validation_error
+            return jsonify({
+                "success": False,
+                "error": error_message
+            }), status_code
+
+        voice = request.form.get('voice')
+
+        try:
+            audio_data = await tts_engine.generate_audio(text, voice)
+        except Exception as e:
+            logger.exception("Error generating audio from uploaded text")
+            return jsonify({
+                "success": False,
+                "error": "Failed to generate audio"
+            }), 500
+
+        if not audio_data:
+            return jsonify({
+                "success": False,
+                "error": "Failed to generate audio"
+            }), 500
+
+        audio_io = io.BytesIO(audio_data)
+        audio_io.seek(0)
+
+        return send_file(
+            audio_io,
+            mimetype='audio/wav',
+            as_attachment=True,
+            download_name='tts_audio.wav'
+        )
+    else:
+        return jsonify({"success": False, "error": "Invalid file type. Only .txt files are allowed."}), 400
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 if __name__ == '__main__':

@@ -28,7 +28,7 @@ if __name__ == "__main__":
     create_directories(DIRECTORIES)
 
     # Get port from environment variable (for Render)
-    port = os.environ.get("PORT", 5000)
+    port = os.environ.get("PORT", "5000")  # Provide a default value as a string
     try:
         port = int(port)
     except ValueError:
@@ -40,7 +40,8 @@ if __name__ == "__main__":
     # Production WSGI server like gunicorn or uWSGI is recommended
     # For development, we can use the built-in Flask server
     try:
-        app.run(host="0.0.0.0", port=port, debug=False)  # Disable debug mode in production
+        # Consider using a configuration file for app settings
+        app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")  # Enable debug mode based on env variable
     except Exception as e:
         logger.exception("Application failed to start.") # Log the full exception traceback
         sys.exit(1)
