@@ -7,6 +7,7 @@ import importlib.util
 import logging
 import venv
 import shutil
+import platform
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -119,7 +120,7 @@ def install_dependencies():
         logging.info("Installing dependencies from requirements.txt...")
         # Use the venv's pip if a virtual environment is active
         pip_executable = [sys.executable, "-m", "pip"]
-        subprocess.check_call(pip_executable + ["install", "-r", REQUIREMENTS_FILE])
+        subprocess.check_call(pip_executable + ["install", "--no-cache-dir", "-r", REQUIREMENTS_FILE])
         logging.info("✅ Dependencies installed.")
         return True
     except subprocess.CalledProcessError as e:
@@ -164,17 +165,24 @@ def main():
                         help="Create a virtual environment")
     parser.add_argument("--no-check-deps", action="store_true",
                         help="Skip dependency check (useful for CI/CD or when dependencies are managed externally)")
+    parser.add_argument("--no-exit", action="store_true",
+                        help="Do not exit after creating venv. Useful for automation.")
+
 
     args = parser.parse_args()
 
     if args.venv:
         if os.path.exists(VENV_DIR):
             logging.warning(f"Virtual environment directory '{VENV_DIR}' already exists.  Please remove it or choose a different directory.")
-            sys.exit(1)
+            if not args.no_exit:
+                sys.exit(1)
         if not create_virtual_environment():
-            sys.exit(1)
-        print(f"Please activate the virtual environment using:\nsource {VENV_DIR}/bin/activate (Linux/macOS)\n{VENV_DIR}\\Scripts\\activate (Windows)")
-        sys.exit(0)
+            if not args.no_exit:
+                sys.exit(1)
+        venv_activation_command = f"source {VENV_DIR}/bin/activate" if platform.system() != "Windows" else f"{VENV_DIR}\\Scripts\\activate"
+        print(f"Please activate the virtual environment using:\n{venv_activation_command}")
+        if not args.no_exit:
+            sys.exit(0)
 
     if args.install:
         if not install_dependencies():

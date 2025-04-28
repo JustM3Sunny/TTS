@@ -9,9 +9,10 @@ from tts_core import TTSEngine, VOICE_MODELS
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
 async def get_text_from_file(file_path: str) -> str | None:
     """
-    Reads text from a file. Handles potential errors gracefully.
+    Reads text from a file asynchronously. Handles potential errors gracefully.
 
     Args:
         file_path: The path to the text file.
@@ -20,8 +21,8 @@ async def get_text_from_file(file_path: str) -> str | None:
         The text content of the file, or None if an error occurred.
     """
     try:
-        async with asyncio.to_thread(open, file_path, 'r', encoding='utf-8') as f:
-            return await asyncio.to_thread(f.read)
+        async with asyncio.FileIO(file_path, mode='r', encoding='utf-8') as f:
+            return await f.read()
     except FileNotFoundError:
         logging.error(f"File not found: {file_path}")
         return None
@@ -76,20 +77,17 @@ async def main():
             if args.output:
                 # Save to file
                 logging.info(f"Converting text to speech using voice '{args.voice}' and saving to '{args.output}'...")
-                success = await engine.save_audio_file(text, args.output, args.voice)
+                await engine.save_audio_file(text, args.output, args.voice)  # Removed success check
 
-                if success:
-                    logging.info(f"Audio saved to {args.output}")
-                else:
-                    logging.error("Failed to generate or save audio.")
+                logging.info(f"Audio saved to {args.output}")
+
 
             else:
                 # Play audio
                 logging.info(f"Converting text to speech using voice '{args.voice}' and playing audio...")
-                success = await engine.speak_text(text, args.voice)
+                await engine.speak_text(text, args.voice)  # Removed success check
 
-                if not success:
-                    logging.error("Failed to generate or play audio.")
+
         except Exception as e:
             logging.exception("An unexpected error occurred during audio processing:")
 

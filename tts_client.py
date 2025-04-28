@@ -5,6 +5,7 @@ import os
 import logging
 from typing import Optional, Dict, List, Union, BinaryIO, Tuple
 from aiohttp import ClientSession, ClientResponse, ContentTypeError, ClientError
+import functools
 
 # Configure logging
 logging.basicConfig(
@@ -58,13 +59,16 @@ class TTSClient:
                 if data.get("success", False) and "voices" in data:
                     return data["voices"]
                 else:
-                    logger.error(f"Invalid response from API: {data}")
+                    logger.warning(f"Invalid response from API: {data}")  # Use warning
                     return {}
         except aiohttp.ClientResponseError as e:
             logger.error(f"API request failed: {e.status} - {e.message}")
             return {}
         except ContentTypeError:
             logger.error("Invalid JSON response received")
+            return {}
+        except ClientError as e:
+            logger.error(f"Client error: {e}")
             return {}
         except Exception as e:
             logger.exception("Unexpected error getting voices")  # Log full traceback
@@ -97,6 +101,9 @@ class TTSClient:
         except aiohttp.ClientResponseError as e:
             logger.error(f"API request failed: {e.status} - {e.message}")
             return None
+        except ClientError as e:
+            logger.error(f"Client error: {e}")
+            return None
         except Exception as e:
             logger.exception("Unexpected error in text_to_speech")
             return None
@@ -128,13 +135,16 @@ class TTSClient:
                 if data.get("success", False) and "audio_data" in data:
                     return data["audio_data"]
                 else:
-                    logger.error(f"Invalid response from API: {data}")
+                    logger.warning(f"Invalid response from API: {data}")  # Use warning
                     return None
         except aiohttp.ClientResponseError as e:
             logger.error(f"API request failed: {e.status} - {e.message}")
             return None
         except ContentTypeError:
             logger.error("Invalid JSON response received")
+            return None
+        except ClientError as e:
+            logger.error(f"Client error: {e}")
             return None
         except Exception as e:
             logger.exception("Unexpected error in text_to_speech_base64")
@@ -157,8 +167,11 @@ class TTSClient:
             if not audio_data:
                 return False
 
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._write_audio_file, output_path, audio_data)
+            # Use functools.partial to pass arguments to _write_audio_file
+            await asyncio.get_event_loop().run_in_executor(
+                None, functools.partial(self._write_audio_file, output_path, audio_data)
+            )
+
             logger.info(f"Audio saved to {output_path}")
             return True
         except Exception as e:

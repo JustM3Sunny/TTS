@@ -41,6 +41,9 @@ def main():
         host = os.environ.get("HOST", "0.0.0.0")  # Default host
         debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
 
+        # Consider using a more robust configuration management solution for larger projects
+        # such as using a dedicated configuration file or a library like `configparser`.
+
         logging.info(f"Starting app on {host}:{port} in {'debug' if debug else 'production'} mode.")
         app.run(host=host, port=port, debug=debug)
 

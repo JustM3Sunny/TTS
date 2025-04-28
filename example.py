@@ -4,9 +4,14 @@ import os
 import logging
 from tts_core import TTSEngine  # Assuming this is a custom module
 from concurrent.futures import ThreadPoolExecutor
+import functools
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Define a global thread pool executor
+executor = ThreadPoolExecutor()
+
 
 async def demo_all_voices():
     """Demonstrate all available voices"""
@@ -26,9 +31,10 @@ async def demo_all_voices():
             output_path = os.path.join(output_dir, f"{voice_name.lower()}_sample.wav")
             try:
                 # Use run_in_executor to avoid blocking the event loop if save_audio_file is CPU-bound
+                # Pass the arguments directly to the function using functools.partial
                 await asyncio.get_running_loop().run_in_executor(
-                    None,  # Use the default thread pool
-                    lambda: asyncio.run(engine.save_audio_file(text, output_path, voice_name))
+                    executor,
+                    functools.partial(engine.save_audio_file, text, output_path, voice_name)
                 )
                 logging.info(f"  ✓ Audio saved to {output_path}")
             except Exception as e:
@@ -81,9 +87,10 @@ async def interactive_demo():
 
         try:
             # Use run_in_executor to avoid blocking the event loop if speak_text is CPU-bound
+            # Pass the arguments directly to the function using functools.partial
             await asyncio.get_running_loop().run_in_executor(
-                None,  # Use the default thread pool
-                lambda: asyncio.run(engine.speak_text(text, voice_name))
+                executor,
+                functools.partial(engine.speak_text, text, voice_name)
             )
         except Exception as e:
             logging.exception(f"An error occurred during audio playback: {e}")
@@ -94,9 +101,10 @@ async def interactive_demo():
 
             try:
                 # Use run_in_executor to avoid blocking the event loop if save_audio_file is CPU-bound
+                # Pass the arguments directly to the function using functools.partial
                 await asyncio.get_running_loop().run_in_executor(
-                    None,  # Use the default thread pool
-                    lambda: asyncio.run(engine.save_audio_file(text, output_path, voice_name))
+                    executor,
+                    functools.partial(engine.save_audio_file, text, output_path, voice_name)
                 )
                 print(f"Audio saved to {output_path}")
             except Exception as e:

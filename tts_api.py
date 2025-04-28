@@ -9,6 +9,7 @@ from functools import wraps
 from typing import Optional, Tuple, Dict, Any
 from werkzeug.exceptions import BadRequest, InternalServerError
 from werkzeug.utils import secure_filename
+from concurrent.futures import ThreadPoolExecutor
 
 # Configure logging
 logging.basicConfig(
@@ -23,6 +24,9 @@ tts_engine = TTSEngine(temp_dir="./temp_audio")
 # Configuration
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit for requests
 ALLOWED_EXTENSIONS = {'txt'}
+
+# Thread pool for blocking operations
+app.executor = ThreadPoolExecutor(max_workers=4)
 
 
 # Decorator for handling exceptions in async routes
@@ -64,9 +68,15 @@ def validate_tts_request(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
     text = data['text']
     if not text.strip():
         return "Text cannot be empty or contain only whitespace", 400
-    if len(text) > 1000:  # Limit text length to prevent abuse
-        return "Text too long. Maximum length is 1000 characters.", 400
+    if len(text) > 5000:  # Increased text length limit
+        return "Text too long. Maximum length is 5000 characters.", 400
     return None
+
+
+async def generate_audio_async(text: str, voice: Optional[str]) -> bytes:
+    """Run audio generation in a thread pool to avoid blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(app.executor, tts_engine.generate_audio, text, voice)
 
 
 @app.route('/api/tts', methods=['POST'])
@@ -87,7 +97,7 @@ async def text_to_speech():
     voice = data.get('voice')
 
     try:
-        audio_data = await tts_engine.generate_audio(text, voice)
+        audio_data = await generate_audio_async(text, voice)
     except Exception as e:
         logger.exception("Error generating audio")
         return jsonify({
@@ -131,7 +141,7 @@ async def text_to_speech_base64():
     voice = data.get('voice')
 
     try:
-        audio_data = await tts_engine.generate_audio(text, voice)
+        audio_data = await generate_audio_async(text, voice)
     except Exception as e:
         logger.exception("Error generating audio")
         return jsonify({
@@ -172,7 +182,9 @@ async def speak():
     voice = data.get('voice')
 
     try:
-        success = await tts_engine.speak_text(text, voice)
+        # Running speak_text in a thread pool as it's likely blocking
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(app.executor, tts_engine.speak_text, text, voice)
     except Exception as e:
         logger.exception("Error speaking text")
         return jsonify({
@@ -221,7 +233,7 @@ async def upload_text():
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         try:
-            text = file.read().decode('utf-8')
+            text = await asyncio.to_thread(file.read().decode, 'utf-8') # Use asyncio.to_thread
         except UnicodeDecodeError:
             return jsonify({"success": False, "error": "Failed to decode file.  Please ensure it is UTF-8 encoded."}), 400
 
@@ -237,7 +249,7 @@ async def upload_text():
         voice = request.form.get('voice')
 
         try:
-            audio_data = await tts_engine.generate_audio(text, voice)
+            audio_data = await generate_audio_async(text, voice)
         except Exception as e:
             logger.exception("Error generating audio from uploaded text")
             return jsonify({

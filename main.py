@@ -32,16 +32,17 @@ if __name__ == "__main__":
     try:
         port = int(port)
     except ValueError:
-        logger.error(f"Invalid port value: {port}.  Using default port 5000.")
+        logger.warning(f"Invalid port value: {port}.  Using default port 5000.")
         port = 5000
 
     logger.info(f"Using port: {port}")
 
     # Production WSGI server like gunicorn or uWSGI is recommended
     # For development, we can use the built-in Flask server
+    debug = os.environ.get("FLASK_DEBUG", "0").lower() in ("true", "1", "t")
     try:
         # Consider using a configuration file for app settings
-        app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")  # Enable debug mode based on env variable
+        app.run(host="0.0.0.0", port=port, debug=debug)  # Enable debug mode based on env variable
     except Exception as e:
         logger.exception("Application failed to start.") # Log the full exception traceback
         sys.exit(1)
