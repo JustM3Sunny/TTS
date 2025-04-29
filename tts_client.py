@@ -168,7 +168,8 @@ class TTSClient:
                 return False
 
             # Use functools.partial to pass arguments to _write_audio_file
-            await asyncio.get_event_loop().run_in_executor(
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
                 None, functools.partial(self._write_audio_file, output_path, audio_data)
             )
 

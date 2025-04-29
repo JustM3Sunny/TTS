@@ -31,10 +31,10 @@ def create_directories(directories):
 def main():
     """Main function to run the Flask app."""
     try:
-        create_directories(DIRECTORIES)
-
         # Import the Flask app (moved inside main to avoid circular import issues)
         from tts_api import app
+
+        create_directories(DIRECTORIES)
 
         # Get configuration values from environment variables
         port = int(os.environ.get("PORT", 5000))

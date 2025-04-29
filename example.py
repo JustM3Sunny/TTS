@@ -30,11 +30,9 @@ async def demo_all_voices():
             logging.info(f"Processing voice: {voice_name}")
             output_path = os.path.join(output_dir, f"{voice_name.lower()}_sample.wav")
             try:
-                # Use run_in_executor to avoid blocking the event loop if save_audio_file is CPU-bound
-                # Pass the arguments directly to the function using functools.partial
                 await asyncio.get_running_loop().run_in_executor(
                     executor,
-                    functools.partial(engine.save_audio_file, text, output_path, voice_name)
+                    lambda: engine.save_audio_file(text, output_path, voice_name)
                 )
                 logging.info(f"  ✓ Audio saved to {output_path}")
             except Exception as e:
@@ -86,11 +84,9 @@ async def interactive_demo():
         print("Playing audio...")
 
         try:
-            # Use run_in_executor to avoid blocking the event loop if speak_text is CPU-bound
-            # Pass the arguments directly to the function using functools.partial
             await asyncio.get_running_loop().run_in_executor(
                 executor,
-                functools.partial(engine.speak_text, text, voice_name)
+                lambda: engine.speak_text(text, voice_name)
             )
         except Exception as e:
             logging.exception(f"An error occurred during audio playback: {e}")
@@ -100,11 +96,9 @@ async def interactive_demo():
             output_path = input("Enter output file path (default: output.wav): ") or "output.wav"
 
             try:
-                # Use run_in_executor to avoid blocking the event loop if save_audio_file is CPU-bound
-                # Pass the arguments directly to the function using functools.partial
                 await asyncio.get_running_loop().run_in_executor(
                     executor,
-                    functools.partial(engine.save_audio_file, text, output_path, voice_name)
+                    lambda: engine.save_audio_file(text, output_path, voice_name)
                 )
                 print(f"Audio saved to {output_path}")
             except Exception as e:

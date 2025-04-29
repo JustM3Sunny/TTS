@@ -8,6 +8,7 @@ import logging
 import venv
 import shutil
 import platform
+import traceback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,6 +30,9 @@ def check_dependencies(packages=None):
             importlib.import_module(package.split('.')[0])
         except ImportError:
             missing_dependencies.append(package)
+        except Exception as e:
+            logging.error(f"❌ Unexpected error while checking for package {package}: {e}")
+            return False
 
     if missing_dependencies:
         logging.error(f"❌ Missing dependencies: {', '.join(missing_dependencies)}")
@@ -49,6 +53,9 @@ def create_directories(directories=None):
             logging.info(f"Created directory: {directory}")
         except OSError as e:
             logging.error(f"❌ Error creating directory {directory}: {e}")
+            return False
+        except Exception as e:
+            logging.error(f"❌ Unexpected error creating directory {directory}: {e}")
             return False
     logging.info("✅ Created necessary directories.")
     return True
@@ -73,6 +80,10 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
     except ImportError as e:
         logging.error(f"❌ Error importing tts_api: {e}")
         logging.info("Please ensure tts_api.py exists and is correctly configured.")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"❌ Unexpected error importing tts_api: {e}")
+        logging.error(traceback.format_exc())
         sys.exit(1)
 
     # Check if running on Render or similar platform
@@ -108,10 +119,19 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
         except ImportError:
             logging.error("Gunicorn is required to run in production. Please install it with: pip install gunicorn")
             sys.exit(1)
+        except Exception as e:
+            logging.error(f"❌ Unexpected error running Gunicorn: {e}")
+            logging.error(traceback.format_exc())
+            sys.exit(1)
 
     else:
         # Use Flask's built-in server for development
-        app.run(debug=debug, host=host, port=port)
+        try:
+            app.run(debug=debug, host=host, port=port)
+        except Exception as e:
+            logging.error(f"❌ Unexpected error running Flask development server: {e}")
+            logging.error(traceback.format_exc())
+            sys.exit(1)
 
 
 def install_dependencies():
@@ -120,14 +140,19 @@ def install_dependencies():
         logging.info("Installing dependencies from requirements.txt...")
         # Use the venv's pip if a virtual environment is active
         pip_executable = [sys.executable, "-m", "pip"]
-        subprocess.check_call(pip_executable + ["install", "--no-cache-dir", "-r", REQUIREMENTS_FILE])
+        subprocess.check_call(pip_executable + ["install", "--no-cache-dir", "-r", REQUIREMENTS_FILE],
+                              stderr=subprocess.STDOUT)  # Capture stderr
         logging.info("✅ Dependencies installed.")
         return True
     except subprocess.CalledProcessError as e:
-        logging.error(f"❌ Error installing dependencies: {e}")
+        logging.error(f"❌ Error installing dependencies: {e.output.decode()}")  # Log the output
         return False
     except FileNotFoundError:
         logging.error(f"❌ {REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")
+        return False
+    except Exception as e:
+        logging.error(f"❌ Unexpected error during dependency installation: {e}")
+        logging.error(traceback.format_exc())
         return False
 
 
@@ -140,6 +165,7 @@ def create_virtual_environment():
         return True
     except Exception as e:
         logging.error(f"❌ Error creating virtual environment: {e}")
+        logging.error(traceback.format_exc())
         # Attempt to remove the directory if creation fails
         try:
             shutil.rmtree(VENV_DIR)

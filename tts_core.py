@@ -1,6 +1,5 @@
 import asyncio
 import aiohttp
-import base64
 import os
 import logging
 import sys
@@ -18,9 +17,10 @@ try:
     PYGAME_AVAILABLE = True
 except ImportError:
     PYGAME_AVAILABLE = False
+    logging.warning("pygame is not available. Audio playback will be disabled.")
 except pygame.error as e:
     PYGAME_AVAILABLE = False
-    print(f"Pygame initialization error: {e}")
+    logging.error(f"Pygame initialization error: {e}")
 
 
 # Configure logging
@@ -30,8 +30,6 @@ logging.basicConfig(
     stream=sys.stdout
 )
 logger = logging.getLogger("tts_core")
-if not PYGAME_AVAILABLE:
-    logger.warning("pygame is not available. Audio playback will be disabled.")
 
 
 # Available voice models
@@ -82,7 +80,6 @@ class TTSEngine:
         self.pygame_initialized = False
         if PYGAME_AVAILABLE:
             try:
-                # pygame.mixer.init()  # Already initialized during import
                 self.pygame_initialized = True
             except pygame.error as e:
                 logger.error(f"Failed to initialize pygame mixer: {e}")
@@ -139,8 +136,7 @@ class TTSEngine:
             session = await self._get_http_session()  # Get the session
             async with session.post(self.DEEPGRAM_API_URL, json=payload) as response:
                 response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-                audio_data = await response.read()  # Get raw audio data directly
-                return audio_data
+                return await response.read()  # Get raw audio data directly
 
         except aiohttp.ClientError as e:
             logger.error(f"API request failed: {e}")
@@ -178,6 +174,9 @@ class TTSEngine:
             with open(temp_file, "wb") as f:
                 f.write(audio_data)
             yield temp_file
+        except Exception as e:
+            logger.exception(f"Error writing to temporary file: {e}")
+            yield None  # Yield None to signal failure
         finally:
             # Ensure cleanup even if there's an exception in the 'with' block
             if os.path.exists(temp_file):
@@ -203,6 +202,9 @@ class TTSEngine:
 
         try:
             async with self._audio_file(audio_data) as temp_file:
+                if temp_file is None:
+                    return False  # Indicate failure if temp_file creation failed
+
                 try:
                     sound = pygame.mixer.Sound(temp_file)
                     sound.play()

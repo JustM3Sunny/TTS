@@ -21,13 +21,16 @@ async def get_text_from_file(file_path: str) -> str | None:
         The text content of the file, or None if an error occurred.
     """
     try:
-        async with asyncio.FileIO(file_path, mode='r', encoding='utf-8') as f:
+        async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
             return await f.read()
     except FileNotFoundError:
         logging.error(f"File not found: {file_path}")
         return None
     except OSError as e:
         logging.error(f"Error reading file: {e}")
+        return None
+    except Exception as e:
+        logging.exception(f"Unexpected error reading file: {e}")
         return None
 
 
@@ -77,7 +80,7 @@ async def main():
             if args.output:
                 # Save to file
                 logging.info(f"Converting text to speech using voice '{args.voice}' and saving to '{args.output}'...")
-                await engine.save_audio_file(text, args.output, args.voice)  # Removed success check
+                await engine.save_audio_file(text, args.output, args.voice)
 
                 logging.info(f"Audio saved to {args.output}")
 
@@ -85,7 +88,7 @@ async def main():
             else:
                 # Play audio
                 logging.info(f"Converting text to speech using voice '{args.voice}' and playing audio...")
-                await engine.speak_text(text, args.voice)  # Removed success check
+                await engine.speak_text(text, args.voice)
 
 
         except Exception as e:
@@ -100,4 +103,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    import aiofiles
     asyncio.run(main())
