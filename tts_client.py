@@ -3,9 +3,10 @@ import asyncio
 import base64
 import os
 import logging
-from typing import Optional, Dict, List, Union, BinaryIO, Tuple
+from typing import Optional, Dict, List, Union, BinaryIO, Tuple, Any
 from aiohttp import ClientSession, ClientResponse, ContentTypeError, ClientError
 import functools
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -28,21 +29,57 @@ class TTSClient:
         self.api_url = api_url
         self._session: Optional[ClientSession] = None
         self._session_lock = asyncio.Lock()  # Add a lock for session creation
+        self._closed = False  # Flag to indicate if the client has been closed
 
     async def _get_session(self) -> ClientSession:
         """
         Get or create an aiohttp ClientSession.
         """
         async with self._session_lock:
+            if self._closed:
+                raise RuntimeError("Client is closed and cannot create a new session.")
             if self._session is None or self._session.closed:
                 self._session = ClientSession()
             return self._session
 
     async def close(self):
         """Close the aiohttp ClientSession."""
-        if self._session:
-            await self._session.close()
+        async with self._session_lock:
+            if self._session:
+                await self._session.close()
             self._session = None  # Ensure the session is set to None after closing
+            self._closed = True
+
+    async def _safe_api_request(self, method: str, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Tuple[Optional[Union[Dict[str, Any], bytes, str]], Optional[int]]:
+        """
+        Handles API requests with centralized error handling and response parsing.
+        """
+        url = f"{self.api_url}{endpoint}"
+        try:
+            session = await self._get_session()
+            async with session.request(method, url, json=data) as response:
+                response.raise_for_status()
+                content_type = response.headers.get('Content-Type', '')
+
+                if 'application/json' in content_type:
+                    return await response.json(), response.status
+                elif 'audio/' in content_type:
+                    return await response.read(), response.status
+                else:
+                    return await response.text(), response.status
+
+        except aiohttp.ClientResponseError as e:
+            logger.error(f"API request failed: {e.status} - {e.message} for URL: {url}")
+            return None, e.status
+        except ContentTypeError:
+            logger.error(f"Invalid JSON response received from URL: {url}")
+            return None, None
+        except ClientError as e:
+            logger.error(f"Client error: {e} for URL: {url}")
+            return None, None
+        except Exception as e:
+            logger.exception(f"Unexpected error during API request to URL: {url}")
+            return None, None
 
     async def get_available_voices(self) -> Dict[str, str]:
         """
@@ -51,27 +88,11 @@ class TTSClient:
         Returns:
             Dictionary of voice names and their model IDs
         """
-        try:
-            session = await self._get_session()
-            async with session.get(f"{self.api_url}/api/voices") as response:
-                response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-                data = await response.json()
-                if data.get("success", False) and "voices" in data:
-                    return data["voices"]
-                else:
-                    logger.warning(f"Invalid response from API: {data}")  # Use warning
-                    return {}
-        except aiohttp.ClientResponseError as e:
-            logger.error(f"API request failed: {e.status} - {e.message}")
-            return {}
-        except ContentTypeError:
-            logger.error("Invalid JSON response received")
-            return {}
-        except ClientError as e:
-            logger.error(f"Client error: {e}")
-            return {}
-        except Exception as e:
-            logger.exception("Unexpected error getting voices")  # Log full traceback
+        response, status = await self._safe_api_request("GET", "/api/voices")
+        if response and isinstance(response, dict) and response.get("success", False) and "voices" in response:
+            return response["voices"]
+        else:
+            logger.warning(f"Invalid response from API: {response}, Status: {status}")
             return {}
 
     async def text_to_speech(self, text: str, voice: Optional[str] = None) -> Optional[bytes]:
@@ -93,19 +114,11 @@ class TTSClient:
         if voice:
             payload["voice"] = voice
 
-        try:
-            session = await self._get_session()
-            async with session.post(f"{self.api_url}/api/tts", json=payload) as response:
-                response.raise_for_status()
-                return await response.read()
-        except aiohttp.ClientResponseError as e:
-            logger.error(f"API request failed: {e.status} - {e.message}")
-            return None
-        except ClientError as e:
-            logger.error(f"Client error: {e}")
-            return None
-        except Exception as e:
-            logger.exception("Unexpected error in text_to_speech")
+        response, status = await self._safe_api_request("POST", "/api/tts", data=payload)
+        if isinstance(response, bytes):
+            return response
+        else:
+            logger.warning(f"TTS conversion failed. Response: {response}, Status: {status}")
             return None
 
     async def text_to_speech_base64(self, text: str, voice: Optional[str] = None) -> Optional[str]:
@@ -127,27 +140,12 @@ class TTSClient:
         if voice:
             payload["voice"] = voice
 
-        try:
-            session = await self._get_session()
-            async with session.post(f"{self.api_url}/api/tts/base64", json=payload) as response:
-                response.raise_for_status()
-                data = await response.json()
-                if data.get("success", False) and "audio_data" in data:
-                    return data["audio_data"]
-                else:
-                    logger.warning(f"Invalid response from API: {data}")  # Use warning
-                    return None
-        except aiohttp.ClientResponseError as e:
-            logger.error(f"API request failed: {e.status} - {e.message}")
-            return None
-        except ContentTypeError:
-            logger.error("Invalid JSON response received")
-            return None
-        except ClientError as e:
-            logger.error(f"Client error: {e}")
-            return None
-        except Exception as e:
-            logger.exception("Unexpected error in text_to_speech_base64")
+        response, status = await self._safe_api_request("POST", "/api/tts/base64", data=payload)
+
+        if response and isinstance(response, dict) and response.get("success", False) and "audio_data" in response:
+            return response["audio_data"]
+        else:
+            logger.warning(f"Base64 TTS conversion failed. Response: {response}, Status: {status}")
             return None
 
     async def save_audio_file(self, text: str, output_path: str, voice: Optional[str] = None) -> bool:
@@ -167,11 +165,7 @@ class TTSClient:
             if not audio_data:
                 return False
 
-            # Use functools.partial to pass arguments to _write_audio_file
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, functools.partial(self._write_audio_file, output_path, audio_data)
-            )
+            await asyncio.to_thread(self._write_audio_file, output_path, audio_data)
 
             logger.info(f"Audio saved to {output_path}")
             return True

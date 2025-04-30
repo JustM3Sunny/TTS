@@ -5,12 +5,13 @@ import logging
 from tts_core import TTSEngine  # Assuming this is a custom module
 from concurrent.futures import ThreadPoolExecutor
 import functools
+import concurrent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Define a global thread pool executor
-executor = ThreadPoolExecutor()
+executor = ThreadPoolExecutor(max_workers=4)  # Limit the number of workers
 
 
 async def demo_all_voices():
@@ -30,9 +31,10 @@ async def demo_all_voices():
             logging.info(f"Processing voice: {voice_name}")
             output_path = os.path.join(output_dir, f"{voice_name.lower()}_sample.wav")
             try:
+                # Use functools.partial to pass arguments to the function executed in the thread pool
                 await asyncio.get_running_loop().run_in_executor(
                     executor,
-                    lambda: engine.save_audio_file(text, output_path, voice_name)
+                    functools.partial(engine.save_audio_file, text, output_path, voice_name)
                 )
                 logging.info(f"  ✓ Audio saved to {output_path}")
             except Exception as e:
@@ -48,7 +50,10 @@ async def demo_all_voices():
         logging.exception(f"An unexpected error occurred in demo_all_voices: {e}")
     finally:
         if engine:
-            engine.cleanup()
+            try:
+                engine.cleanup()
+            except Exception as e:
+                logging.exception(f"Error during engine cleanup: {e}")
 
 
 async def interactive_demo():
@@ -86,7 +91,7 @@ async def interactive_demo():
         try:
             await asyncio.get_running_loop().run_in_executor(
                 executor,
-                lambda: engine.speak_text(text, voice_name)
+                functools.partial(engine.speak_text, text, voice_name)
             )
         except Exception as e:
             logging.exception(f"An error occurred during audio playback: {e}")
@@ -98,7 +103,7 @@ async def interactive_demo():
             try:
                 await asyncio.get_running_loop().run_in_executor(
                     executor,
-                    lambda: engine.save_audio_file(text, output_path, voice_name)
+                    functools.partial(engine.save_audio_file, text, output_path, voice_name)
                 )
                 print(f"Audio saved to {output_path}")
             except Exception as e:
@@ -108,7 +113,10 @@ async def interactive_demo():
         logging.exception(f"An unexpected error occurred in interactive_demo: {e}")
     finally:
         if engine:
-            engine.cleanup()
+            try:
+                engine.cleanup()
+            except Exception as e:
+                logging.exception(f"Error during engine cleanup: {e}")
 
 
 async def main():

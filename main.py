@@ -3,10 +3,15 @@ import os
 import logging
 import sys
 from tts_api import app  # Assuming tts_api is a module/package
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 logger = logging.getLogger(__name__)  # Get a specific logger for this module
+
 
 # Define directories
 DIRECTORIES = ["templates", "static", "temp_audio", "voice_samples"]
@@ -39,10 +44,12 @@ if __name__ == "__main__":
 
     # Production WSGI server like gunicorn or uWSGI is recommended
     # For development, we can use the built-in Flask server
-    debug = os.environ.get("FLASK_DEBUG", "0").lower() in ("true", "1", "t")
+    flask_debug = os.environ.get("FLASK_DEBUG", "0").lower() in ("true", "1", "t")
+    flask_host = os.environ.get("FLASK_HOST", "0.0.0.0")
+
     try:
         # Consider using a configuration file for app settings
-        app.run(host="0.0.0.0", port=port, debug=debug)  # Enable debug mode based on env variable
+        app.run(host=flask_host, port=port, debug=flask_debug)  # Enable debug mode based on env variable
     except Exception as e:
         logger.exception("Application failed to start.") # Log the full exception traceback
         sys.exit(1)

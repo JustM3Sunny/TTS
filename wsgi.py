@@ -24,7 +24,7 @@ def create_directories(directories):
             logging.info(f"Created directory: {directory}")
         except OSError as e:
             logging.error(f"Error creating directory {directory}: {e}")
-            logging.error(f"The program will now exit.")
+            logging.error("The program will now exit.")
             sys.exit(1)  # Exit the program if directory creation fails
 
 
@@ -39,21 +39,21 @@ def main():
         # Get configuration values from environment variables
         port = int(os.environ.get("PORT", 5000))
         host = os.environ.get("HOST", "0.0.0.0")  # Default host
-        debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+        flask_debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
 
         # Consider using a more robust configuration management solution for larger projects
         # such as using a dedicated configuration file or a library like `configparser`.
 
-        logging.info(f"Starting app on {host}:{port} in {'debug' if debug else 'production'} mode.")
-        app.run(host=host, port=port, debug=debug)
+        logging.info(f"Starting app on {host}:{port} in {'debug' if flask_debug else 'production'} mode.")
+        app.run(host=host, port=port, debug=flask_debug)
 
     except ImportError as e:
         logging.critical(f"Failed to import tts_api: {e}")
-        logging.critical(f"The program will now exit.")
+        logging.critical("The program will now exit.")
         sys.exit(1)
     except Exception as e:
-        logging.critical(f"Application failed to start: {e}")
-        logging.critical(f"The program will now exit.")
+        logging.exception("Application failed to start.") # Logs the full exception, including traceback
+        logging.critical("The program will now exit.")
         sys.exit(1)
 
 

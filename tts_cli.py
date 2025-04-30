@@ -21,6 +21,7 @@ async def get_text_from_file(file_path: str) -> str | None:
         The text content of the file, or None if an error occurred.
     """
     try:
+        import aiofiles  # Import aiofiles here to avoid import errors when not needed
         async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
             return await f.read()
     except FileNotFoundError:
@@ -81,19 +82,15 @@ async def main():
                 # Save to file
                 logging.info(f"Converting text to speech using voice '{args.voice}' and saving to '{args.output}'...")
                 await engine.save_audio_file(text, args.output, args.voice)
-
                 logging.info(f"Audio saved to {args.output}")
-
-
             else:
                 # Play audio
                 logging.info(f"Converting text to speech using voice '{args.voice}' and playing audio...")
                 await engine.speak_text(text, args.voice)
-
-
         except Exception as e:
             logging.exception("An unexpected error occurred during audio processing:")
-
+    except Exception as e:
+        logging.exception(f"An unexpected error occurred: {e}")
     finally:
         # Clean up resources
         try:
@@ -103,5 +100,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    import aiofiles
     asyncio.run(main())

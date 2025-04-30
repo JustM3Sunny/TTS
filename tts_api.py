@@ -10,6 +10,7 @@ from typing import Optional, Tuple, Dict, Any
 from werkzeug.exceptions import BadRequest, InternalServerError
 from werkzeug.utils import secure_filename
 from concurrent.futures import ThreadPoolExecutor
+import traceback
 
 # Configure logging
 logging.basicConfig(
@@ -36,10 +37,10 @@ def handle_exceptions(f):
         try:
             return await f(*args, **kwargs)
         except Exception as e:
-            logger.exception(f"Error in {f.__name__}: {e}")
+            logger.error(f"Error in {f.__name__}: {e}", exc_info=True)  # Log with traceback
             return jsonify({
                 "success": False,
-                "error": str(e)  # Return the specific error message
+                "error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}"  # More informative error
             }), 500
     return wrapper
 
@@ -63,7 +64,7 @@ def validate_tts_request(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
     """Validates the TTS request data."""
     if not data or 'text' not in data:
         return "Missing required parameter: text", 400
-    text = data['text']
+    text = data.get('text', '')  # Use .get() to avoid KeyError
     if not isinstance(text, str):
         return "Text must be a string", 400
     text = text.strip()
@@ -76,7 +77,11 @@ def validate_tts_request(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
 
 async def generate_audio_async(text: str, voice: Optional[str]) -> bytes:
     """Run audio generation in a thread pool to avoid blocking the event loop."""
-    return await asyncio.get_event_loop().run_in_executor(app.executor, tts_engine.generate_audio, text, voice)
+    try:
+        return await asyncio.get_event_loop().run_in_executor(app.executor, tts_engine.generate_audio, text, voice)
+    except Exception as e:
+        logger.error(f"Error in generate_audio_async: {e}", exc_info=True)
+        raise
 
 
 @app.route('/api/tts', methods=['POST'])
@@ -228,7 +233,7 @@ async def upload_text():
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         try:
-            text = await asyncio.to_thread(file.read().decode, 'utf-8') # Use asyncio.to_thread
+            text = (await asyncio.to_thread(file.read)).decode('utf-8')  # Read and decode in one step
         except UnicodeDecodeError:
             return jsonify({"success": False, "error": "Failed to decode file.  Please ensure it is UTF-8 encoded."}), 400
 
