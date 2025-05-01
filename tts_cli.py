@@ -35,6 +35,23 @@ async def get_text_from_file(file_path: str) -> str | None:
         return None
 
 
+async def process_text(engine: TTSEngine, text: str, voice: str, output: str | None):
+    """Processes the text-to-speech conversion and either saves to a file or plays audio."""
+    try:
+        if output:
+            # Save to file
+            logging.info(f"Converting text to speech using voice '{voice}' and saving to '{output}'...")
+            await engine.save_audio_file(text, output, voice)
+            logging.info(f"Audio saved to {output}")
+        else:
+            # Play audio
+            logging.info(f"Converting text to speech using voice '{voice}' and playing audio...")
+            await engine.speak_text(text, voice)
+    except Exception as e:
+        logging.exception("An unexpected error occurred during audio processing:")
+        raise  # Re-raise the exception to be caught in the main function
+
+
 async def main():
     parser = argparse.ArgumentParser(description="Text-to-Speech Command Line Interface")
 
@@ -77,18 +94,8 @@ async def main():
             return
 
         # Convert text to speech
-        try:
-            if args.output:
-                # Save to file
-                logging.info(f"Converting text to speech using voice '{args.voice}' and saving to '{args.output}'...")
-                await engine.save_audio_file(text, args.output, args.voice)
-                logging.info(f"Audio saved to {args.output}")
-            else:
-                # Play audio
-                logging.info(f"Converting text to speech using voice '{args.voice}' and playing audio...")
-                await engine.speak_text(text, args.voice)
-        except Exception as e:
-            logging.exception("An unexpected error occurred during audio processing:")
+        await process_text(engine, text, args.voice, args.output)
+
     except Exception as e:
         logging.exception(f"An unexpected error occurred: {e}")
     finally:

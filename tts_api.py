@@ -37,10 +37,11 @@ def handle_exceptions(f):
         try:
             return await f(*args, **kwargs)
         except Exception as e:
-            logger.error(f"Error in {f.__name__}: {e}", exc_info=True)  # Log with traceback
+            error_message = f"Error in {f.__name__}: {type(e).__name__} - {str(e)}"
+            logger.error(error_message, exc_info=True)  # Log with traceback
             return jsonify({
                 "success": False,
-                "error": f"An unexpected error occurred: {type(e).__name__} - {str(e)}"  # More informative error
+                "error": error_message
             }), 500
     return wrapper
 
@@ -52,7 +53,7 @@ def index():
 
 
 @app.route('/api/voices', methods=['GET'])
-def get_voices():
+async def get_voices():
     """Return a list of available voices"""
     return jsonify({
         "success": True,
@@ -78,10 +79,28 @@ def validate_tts_request(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
 async def generate_audio_async(text: str, voice: Optional[str]) -> bytes:
     """Run audio generation in a thread pool to avoid blocking the event loop."""
     try:
-        return await asyncio.get_event_loop().run_in_executor(app.executor, tts_engine.generate_audio, text, voice)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(app.executor, tts_engine.generate_audio, text, voice)
     except Exception as e:
         logger.error(f"Error in generate_audio_async: {e}", exc_info=True)
         raise
+
+
+async def process_tts_request(data: Dict[str, Any]) -> Tuple[Optional[bytes], Optional[Tuple[str, int]]]:
+    """Processes the TTS request, handling validation and audio generation."""
+    validation_error = validate_tts_request(data)
+    if validation_error:
+        return None, validation_error
+
+    text = data['text']
+    voice = data.get('voice')
+
+    try:
+        audio_data = await generate_audio_async(text, voice)
+        return audio_data, None
+    except Exception as e:
+        logger.exception("Error generating audio")
+        return None, ("Failed to generate audio", 500)
 
 
 @app.route('/api/tts', methods=['POST'])
@@ -90,25 +109,14 @@ async def text_to_speech():
     """Convert text to speech and return audio file"""
     data = request.get_json()
 
-    validation_error = validate_tts_request(data)
-    if validation_error:
-        error_message, status_code = validation_error
+    audio_data, error_info = await process_tts_request(data)
+
+    if error_info:
+        error_message, status_code = error_info
         return jsonify({
             "success": False,
             "error": error_message
         }), status_code
-
-    text = data['text']
-    voice = data.get('voice')
-
-    try:
-        audio_data = await generate_audio_async(text, voice)
-    except Exception as e:
-        logger.exception("Error generating audio")
-        return jsonify({
-            "success": False,
-            "error": "Failed to generate audio"
-        }), 500
 
     if not audio_data:
         return jsonify({
@@ -131,25 +139,14 @@ async def text_to_speech_base64():
 
     data = request.get_json()
 
-    validation_error = validate_tts_request(data)
-    if validation_error:
-        error_message, status_code = validation_error
+    audio_data, error_info = await process_tts_request(data)
+
+    if error_info:
+        error_message, status_code = error_info
         return jsonify({
             "success": False,
             "error": error_message
         }), status_code
-
-    text = data['text']
-    voice = data.get('voice')
-
-    try:
-        audio_data = await generate_audio_async(text, voice)
-    except Exception as e:
-        logger.exception("Error generating audio")
-        return jsonify({
-            "success": False,
-            "error": "Failed to generate audio"
-        }), 500
 
     if not audio_data:
         return jsonify({
@@ -184,7 +181,8 @@ async def speak():
     voice = data.get('voice')
 
     try:
-        success = await asyncio.get_event_loop().run_in_executor(app.executor, tts_engine.speak_text, text, voice)
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(app.executor, tts_engine.speak_text, text, voice)
     except Exception as e:
         logger.exception("Error speaking text")
         return jsonify({
@@ -237,24 +235,15 @@ async def upload_text():
         except UnicodeDecodeError:
             return jsonify({"success": False, "error": "Failed to decode file.  Please ensure it is UTF-8 encoded."}), 400
 
-        validation_error = validate_tts_request({'text': text}) # Pass a dictionary to the validation function
-        if validation_error:
-            error_message, status_code = validation_error
+        data = {'text': text}
+        audio_data, error_info = await process_tts_request(data)
+
+        if error_info:
+            error_message, status_code = error_info
             return jsonify({
                 "success": False,
                 "error": error_message
             }), status_code
-
-        voice = request.form.get('voice')
-
-        try:
-            audio_data = await generate_audio_async(text, voice)
-        except Exception as e:
-            logger.exception("Error generating audio from uploaded text")
-            return jsonify({
-                "success": False,
-                "error": "Failed to generate audio"
-            }), 500
 
         if not audio_data:
             return jsonify({

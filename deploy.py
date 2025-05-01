@@ -9,21 +9,22 @@ import venv
 import shutil
 import platform
 import traceback
+from typing import List
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-REQUIRED_PACKAGES = ["flask", "aiohttp", "pygame", "requests"]
-DEFAULT_DIRECTORIES = ["templates", "static", "temp_audio", "voice_samples"]
-VENV_DIR = "venv"
-REQUIREMENTS_FILE = "requirements.txt"
+REQUIRED_PACKAGES: List[str] = ["flask", "aiohttp", "pygame", "requests"]
+DEFAULT_DIRECTORIES: List[str] = ["templates", "static", "temp_audio", "voice_samples"]
+VENV_DIR: str = "venv"
+REQUIREMENTS_FILE: str = "requirements.txt"
 
 
-def check_dependencies(packages=None):
+def check_dependencies(packages: List[str] = None) -> bool:
     """Check if all required dependencies are installed"""
     if packages is None:
         packages = REQUIRED_PACKAGES
-    missing_dependencies = []
+    missing_dependencies: List[str] = []
     for package in packages:
         try:
             # Attempt to import the top-level package name only
@@ -31,7 +32,7 @@ def check_dependencies(packages=None):
         except ImportError:
             missing_dependencies.append(package)
         except Exception as e:
-            logging.error(f"❌ Unexpected error while checking for package {package}: {e}")
+            logging.exception(f"❌ Unexpected error while checking for package {package}: {e}")
             return False
 
     if missing_dependencies:
@@ -43,7 +44,7 @@ def check_dependencies(packages=None):
         return True
 
 
-def create_directories(directories=None):
+def create_directories(directories: List[str] = None) -> bool:
     """Create necessary directories"""
     if directories is None:
         directories = DEFAULT_DIRECTORIES
@@ -55,13 +56,13 @@ def create_directories(directories=None):
             logging.error(f"❌ Error creating directory {directory}: {e}")
             return False
         except Exception as e:
-            logging.error(f"❌ Unexpected error creating directory {directory}: {e}")
+            logging.exception(f"❌ Unexpected error creating directory {directory}: {e}")
             return False
     logging.info("✅ Created necessary directories.")
     return True
 
 
-def start_server(host="0.0.0.0", port=5000, debug=False):
+def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -> None:
     """Start the TTS API server"""
     if not check_dependencies():
         logging.error("Dependencies are missing. Exiting.")
@@ -82,8 +83,7 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
         logging.info("Please ensure tts_api.py exists and is correctly configured.")
         sys.exit(1)
     except Exception as e:
-        logging.error(f"❌ Unexpected error importing tts_api: {e}")
-        logging.error(traceback.format_exc())
+        logging.exception(f"❌ Unexpected error importing tts_api: {e}")
         sys.exit(1)
 
     # Check if running on Render or similar platform
@@ -120,8 +120,7 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
             logging.error("Gunicorn is required to run in production. Please install it with: pip install gunicorn")
             sys.exit(1)
         except Exception as e:
-            logging.error(f"❌ Unexpected error running Gunicorn: {e}")
-            logging.error(traceback.format_exc())
+            logging.exception(f"❌ Unexpected error running Gunicorn: {e}")
             sys.exit(1)
 
     else:
@@ -129,12 +128,11 @@ def start_server(host="0.0.0.0", port=5000, debug=False):
         try:
             app.run(debug=debug, host=host, port=port)
         except Exception as e:
-            logging.error(f"❌ Unexpected error running Flask development server: {e}")
-            logging.error(traceback.format_exc())
+            logging.exception(f"❌ Unexpected error running Flask development server: {e}")
             sys.exit(1)
 
 
-def install_dependencies():
+def install_dependencies() -> bool:
     """Install dependencies using pip."""
     try:
         logging.info("Installing dependencies from requirements.txt...")
@@ -151,12 +149,11 @@ def install_dependencies():
         logging.error(f"❌ {REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")
         return False
     except Exception as e:
-        logging.error(f"❌ Unexpected error during dependency installation: {e}")
-        logging.error(traceback.format_exc())
+        logging.exception(f"❌ Unexpected error during dependency installation: {e}")
         return False
 
 
-def create_virtual_environment():
+def create_virtual_environment() -> bool:
     """Creates a virtual environment."""
     try:
         logging.info(f"Creating virtual environment in {VENV_DIR}...")
@@ -164,8 +161,7 @@ def create_virtual_environment():
         logging.info(f"✅ Virtual environment created in {VENV_DIR}.")
         return True
     except Exception as e:
-        logging.error(f"❌ Error creating virtual environment: {e}")
-        logging.error(traceback.format_exc())
+        logging.exception(f"❌ Error creating virtual environment: {e}")
         # Attempt to remove the directory if creation fails
         try:
             shutil.rmtree(VENV_DIR)
@@ -175,7 +171,7 @@ def create_virtual_environment():
         return False
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Text-to-Speech Platform Deployment Script")
 
     # Add arguments

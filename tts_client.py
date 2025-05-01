@@ -39,7 +39,7 @@ class TTSClient:
             if self._closed:
                 raise RuntimeError("Client is closed and cannot create a new session.")
             if self._session is None or self._session.closed:
-                self._session = ClientSession()
+                self._session = aiohttp.ClientSession()  # Explicitly use aiohttp
             return self._session
 
     async def close(self):
@@ -62,7 +62,11 @@ class TTSClient:
                 content_type = response.headers.get('Content-Type', '')
 
                 if 'application/json' in content_type:
-                    return await response.json(), response.status
+                    try:
+                        return await response.json(), response.status
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to decode JSON from URL: {url}")
+                        return None, response.status
                 elif 'audio/' in content_type:
                     return await response.read(), response.status
                 else:
@@ -71,10 +75,10 @@ class TTSClient:
         except aiohttp.ClientResponseError as e:
             logger.error(f"API request failed: {e.status} - {e.message} for URL: {url}")
             return None, e.status
-        except ContentTypeError:
-            logger.error(f"Invalid JSON response received from URL: {url}")
+        except aiohttp.ContentTypeError as e:
+            logger.error(f"Invalid content type received from URL: {url}. Error: {e}")
             return None, None
-        except ClientError as e:
+        except aiohttp.ClientError as e:
             logger.error(f"Client error: {e} for URL: {url}")
             return None, None
         except Exception as e:
@@ -165,7 +169,8 @@ class TTSClient:
             if not audio_data:
                 return False
 
-            await asyncio.to_thread(self._write_audio_file, output_path, audio_data)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._write_audio_file, output_path, audio_data)
 
             logger.info(f"Audio saved to {output_path}")
             return True
