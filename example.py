@@ -5,6 +5,7 @@ import logging
 from tts_core import TTSEngine  # Assuming this is a custom module
 from concurrent.futures import ThreadPoolExecutor
 import functools
+import concurrent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,10 +14,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 MAX_WORKERS = os.cpu_count() or 4  # Use CPU count or default to 4
 executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
+
 async def run_in_executor(func, *args, **kwargs):
     """Helper function to run a function in the thread pool executor."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(executor, functools.partial(func, *args, **kwargs))
+    # Use functools.partial to pre-configure the function with arguments
+    wrapped_func = functools.partial(func, *args, **kwargs)
+    try:
+        return await loop.run_in_executor(executor, wrapped_func)
+    except concurrent.futures.CancelledError:
+        logging.warning("Task cancelled while running in executor.")
+        return None  # Or raise, depending on desired behavior
 
 
 async def demo_all_voices():
@@ -131,4 +139,9 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nExiting...")
+    finally:
+        executor.shutdown(wait=True)

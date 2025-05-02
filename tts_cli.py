@@ -78,11 +78,7 @@ async def main():
             return
 
         # Get text from file or command line
-        text = None
-        if args.text:
-            text = args.text
-        elif args.file:
-            text = await get_text_from_file(args.file)
+        text = args.text or (await get_text_from_file(args.file) if args.file else None)
 
         if not text:
             logging.error("No text provided. Please use --text or --file.")
@@ -104,7 +100,3 @@ async def main():
             await engine.cleanup()  # Await the cleanup, assuming it's async
         except Exception as e:
             logging.exception(f"Error during cleanup: {e}")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

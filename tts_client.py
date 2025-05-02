@@ -169,6 +169,7 @@ class TTSClient:
             if not audio_data:
                 return False
 
+            # Use a dedicated thread pool to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._write_audio_file, output_path, audio_data)
 

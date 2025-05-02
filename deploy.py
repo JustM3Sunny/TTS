@@ -9,7 +9,7 @@ import venv
 import shutil
 import platform
 import traceback
-from typing import List
+from typing import List, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,10 +20,9 @@ VENV_DIR: str = "venv"
 REQUIREMENTS_FILE: str = "requirements.txt"
 
 
-def check_dependencies(packages: List[str] = None) -> bool:
+def check_dependencies(packages: Optional[List[str]] = None) -> bool:
     """Check if all required dependencies are installed"""
-    if packages is None:
-        packages = REQUIRED_PACKAGES
+    packages = packages or REQUIRED_PACKAGES
     missing_dependencies: List[str] = []
     for package in packages:
         try:
@@ -32,33 +31,32 @@ def check_dependencies(packages: List[str] = None) -> bool:
         except ImportError:
             missing_dependencies.append(package)
         except Exception as e:
-            logging.exception(f"❌ Unexpected error while checking for package {package}: {e}")
+            logging.exception(f"Unexpected error while checking for package {package}: {e}")  # Removed redundant "❌"
             return False
 
     if missing_dependencies:
-        logging.error(f"❌ Missing dependencies: {', '.join(missing_dependencies)}")
+        logging.error(f"Missing dependencies: {', '.join(missing_dependencies)}")  # Removed redundant "❌"
         logging.info(f"Please install all dependencies with: pip install -r {REQUIREMENTS_FILE}")
         return False
     else:
-        logging.info("✅ All required dependencies are installed.")
+        logging.info("All required dependencies are installed.")  # Removed redundant "✅"
         return True
 
 
-def create_directories(directories: List[str] = None) -> bool:
+def create_directories(directories: Optional[List[str]] = None) -> bool:
     """Create necessary directories"""
-    if directories is None:
-        directories = DEFAULT_DIRECTORIES
+    directories = directories or DEFAULT_DIRECTORIES
     for directory in directories:
         try:
             os.makedirs(directory, exist_ok=True)
             logging.info(f"Created directory: {directory}")
         except OSError as e:
-            logging.error(f"❌ Error creating directory {directory}: {e}")
+            logging.error(f"Error creating directory {directory}: {e}")  # Removed redundant "❌"
             return False
         except Exception as e:
-            logging.exception(f"❌ Unexpected error creating directory {directory}: {e}")
+            logging.exception(f"Unexpected error creating directory {directory}: {e}")  # Removed redundant "❌"
             return False
-    logging.info("✅ Created necessary directories.")
+    logging.info("Created necessary directories.")  # Removed redundant "✅"
     return True
 
 
@@ -79,11 +77,11 @@ def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -
     try:
         from tts_api import app
     except ImportError as e:
-        logging.error(f"❌ Error importing tts_api: {e}")
+        logging.error(f"Error importing tts_api: {e}")  # Removed redundant "❌"
         logging.info("Please ensure tts_api.py exists and is correctly configured.")
         sys.exit(1)
     except Exception as e:
-        logging.exception(f"❌ Unexpected error importing tts_api: {e}")
+        logging.exception(f"Unexpected error importing tts_api: {e}")  # Removed redundant "❌"
         sys.exit(1)
 
     # Check if running on Render or similar platform
@@ -120,7 +118,7 @@ def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -
             logging.error("Gunicorn is required to run in production. Please install it with: pip install gunicorn")
             sys.exit(1)
         except Exception as e:
-            logging.exception(f"❌ Unexpected error running Gunicorn: {e}")
+            logging.exception(f"Unexpected error running Gunicorn: {e}")  # Removed redundant "❌"
             sys.exit(1)
 
     else:
@@ -128,7 +126,7 @@ def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -
         try:
             app.run(debug=debug, host=host, port=port)
         except Exception as e:
-            logging.exception(f"❌ Unexpected error running Flask development server: {e}")
+            logging.exception(f"Unexpected error running Flask development server: {e}")  # Removed redundant "❌"
             sys.exit(1)
 
 
@@ -140,16 +138,16 @@ def install_dependencies() -> bool:
         pip_executable = [sys.executable, "-m", "pip"]
         subprocess.check_call(pip_executable + ["install", "--no-cache-dir", "-r", REQUIREMENTS_FILE],
                               stderr=subprocess.STDOUT)  # Capture stderr
-        logging.info("✅ Dependencies installed.")
+        logging.info("Dependencies installed.")  # Removed redundant "✅"
         return True
     except subprocess.CalledProcessError as e:
-        logging.error(f"❌ Error installing dependencies: {e.output.decode()}")  # Log the output
+        logging.error(f"Error installing dependencies: {e.output.decode()}")  # Removed redundant "❌"
         return False
     except FileNotFoundError:
-        logging.error(f"❌ {REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")
+        logging.error(f"{REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")  # Removed redundant "❌"
         return False
     except Exception as e:
-        logging.exception(f"❌ Unexpected error during dependency installation: {e}")
+        logging.exception(f"Unexpected error during dependency installation: {e}")  # Removed redundant "❌"
         return False
 
 
@@ -158,10 +156,10 @@ def create_virtual_environment() -> bool:
     try:
         logging.info(f"Creating virtual environment in {VENV_DIR}...")
         venv.create(VENV_DIR, with_pip=True)
-        logging.info(f"✅ Virtual environment created in {VENV_DIR}.")
+        logging.info(f"Virtual environment created in {VENV_DIR}.")  # Removed redundant "✅"
         return True
     except Exception as e:
-        logging.exception(f"❌ Error creating virtual environment: {e}")
+        logging.exception(f"Unexpected error creating virtual environment: {e}")  # Removed redundant "❌"
         # Attempt to remove the directory if creation fails
         try:
             shutil.rmtree(VENV_DIR)

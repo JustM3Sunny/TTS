@@ -38,7 +38,7 @@ def handle_exceptions(f):
             return await f(*args, **kwargs)
         except Exception as e:
             error_message = f"Error in {f.__name__}: {type(e).__name__} - {str(e)}"
-            logger.error(error_message, exc_info=True)  # Log with traceback
+            logger.exception(error_message)  # Log with traceback
             return jsonify({
                 "success": False,
                 "error": error_message
@@ -63,16 +63,20 @@ async def get_voices():
 
 def validate_tts_request(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
     """Validates the TTS request data."""
-    if not data or 'text' not in data:
+    text = data.get('text')
+    if not text:
         return "Missing required parameter: text", 400
-    text = data.get('text', '')  # Use .get() to avoid KeyError
+
     if not isinstance(text, str):
         return "Text must be a string", 400
+
     text = text.strip()
     if not text:
         return "Text cannot be empty or contain only whitespace", 400
+
     if len(text) > 5000:  # Increased text length limit
         return "Text too long. Maximum length is 5000 characters.", 400
+
     return None
 
 
@@ -82,7 +86,7 @@ async def generate_audio_async(text: str, voice: Optional[str]) -> bytes:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(app.executor, tts_engine.generate_audio, text, voice)
     except Exception as e:
-        logger.error(f"Error in generate_audio_async: {e}", exc_info=True)
+        logger.exception(f"Error in generate_audio_async: {e}")
         raise
 
 
@@ -159,7 +163,7 @@ async def text_to_speech_base64():
     return jsonify({
         "success": True,
         "audio_data": base64_audio,
-        "voice": voice or tts_engine.default_voice
+        "voice": data.get('voice') or tts_engine.default_voice  # Use data.get('voice') here
     })
 
 
