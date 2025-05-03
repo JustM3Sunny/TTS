@@ -8,7 +8,6 @@ import logging
 import venv
 import shutil
 import platform
-import traceback
 from typing import List, Optional
 
 # Configure logging
@@ -31,15 +30,15 @@ def check_dependencies(packages: Optional[List[str]] = None) -> bool:
         except ImportError:
             missing_dependencies.append(package)
         except Exception as e:
-            logging.exception(f"Unexpected error while checking for package {package}: {e}")  # Removed redundant "❌"
+            logging.exception(f"Unexpected error while checking for package {package}")
             return False
 
     if missing_dependencies:
-        logging.error(f"Missing dependencies: {', '.join(missing_dependencies)}")  # Removed redundant "❌"
+        logging.error(f"Missing dependencies: {', '.join(missing_dependencies)}")
         logging.info(f"Please install all dependencies with: pip install -r {REQUIREMENTS_FILE}")
         return False
     else:
-        logging.info("All required dependencies are installed.")  # Removed redundant "✅"
+        logging.info("All required dependencies are installed.")
         return True
 
 
@@ -51,12 +50,12 @@ def create_directories(directories: Optional[List[str]] = None) -> bool:
             os.makedirs(directory, exist_ok=True)
             logging.info(f"Created directory: {directory}")
         except OSError as e:
-            logging.error(f"Error creating directory {directory}: {e}")  # Removed redundant "❌"
+            logging.error(f"Error creating directory {directory}: {e}")
             return False
         except Exception as e:
-            logging.exception(f"Unexpected error creating directory {directory}: {e}")  # Removed redundant "❌"
+            logging.exception(f"Unexpected error creating directory {directory}: {e}")
             return False
-    logging.info("Created necessary directories.")  # Removed redundant "✅"
+    logging.info("Created necessary directories.")
     return True
 
 
@@ -77,11 +76,11 @@ def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -
     try:
         from tts_api import app
     except ImportError as e:
-        logging.error(f"Error importing tts_api: {e}")  # Removed redundant "❌"
+        logging.error(f"Error importing tts_api: {e}")
         logging.info("Please ensure tts_api.py exists and is correctly configured.")
         sys.exit(1)
     except Exception as e:
-        logging.exception(f"Unexpected error importing tts_api: {e}")  # Removed redundant "❌"
+        logging.exception(f"Unexpected error importing tts_api: {e}")
         sys.exit(1)
 
     # Check if running on Render or similar platform
@@ -118,7 +117,7 @@ def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -
             logging.error("Gunicorn is required to run in production. Please install it with: pip install gunicorn")
             sys.exit(1)
         except Exception as e:
-            logging.exception(f"Unexpected error running Gunicorn: {e}")  # Removed redundant "❌"
+            logging.exception(f"Unexpected error running Gunicorn: {e}")
             sys.exit(1)
 
     else:
@@ -126,7 +125,7 @@ def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False) -
         try:
             app.run(debug=debug, host=host, port=port)
         except Exception as e:
-            logging.exception(f"Unexpected error running Flask development server: {e}")  # Removed redundant "❌"
+            logging.exception(f"Unexpected error running Flask development server: {e}")
             sys.exit(1)
 
 
@@ -138,16 +137,16 @@ def install_dependencies() -> bool:
         pip_executable = [sys.executable, "-m", "pip"]
         subprocess.check_call(pip_executable + ["install", "--no-cache-dir", "-r", REQUIREMENTS_FILE],
                               stderr=subprocess.STDOUT)  # Capture stderr
-        logging.info("Dependencies installed.")  # Removed redundant "✅"
+        logging.info("Dependencies installed.")
         return True
     except subprocess.CalledProcessError as e:
-        logging.error(f"Error installing dependencies: {e.output.decode()}")  # Removed redundant "❌"
+        logging.error(f"Error installing dependencies: {e.output.decode()}")
         return False
     except FileNotFoundError:
-        logging.error(f"{REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")  # Removed redundant "❌"
+        logging.error(f"{REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")
         return False
     except Exception as e:
-        logging.exception(f"Unexpected error during dependency installation: {e}")  # Removed redundant "❌"
+        logging.exception(f"Unexpected error during dependency installation: {e}")
         return False
 
 
@@ -156,10 +155,10 @@ def create_virtual_environment() -> bool:
     try:
         logging.info(f"Creating virtual environment in {VENV_DIR}...")
         venv.create(VENV_DIR, with_pip=True)
-        logging.info(f"Virtual environment created in {VENV_DIR}.")  # Removed redundant "✅"
+        logging.info(f"Virtual environment created in {VENV_DIR}.")
         return True
     except Exception as e:
-        logging.exception(f"Unexpected error creating virtual environment: {e}")  # Removed redundant "❌"
+        logging.exception(f"Unexpected error creating virtual environment: {e}")
         # Attempt to remove the directory if creation fails
         try:
             shutil.rmtree(VENV_DIR)

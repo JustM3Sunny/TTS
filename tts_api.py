@@ -87,7 +87,7 @@ async def generate_audio_async(text: str, voice: Optional[str]) -> bytes:
         return await loop.run_in_executor(app.executor, tts_engine.generate_audio, text, voice)
     except Exception as e:
         logger.exception(f"Error in generate_audio_async: {e}")
-        raise
+        raise  # Re-raise the exception to be caught by the caller
 
 
 async def process_tts_request(data: Dict[str, Any]) -> Tuple[Optional[bytes], Optional[Tuple[str, int]]]:

@@ -6,6 +6,7 @@ from tts_core import TTSEngine  # Assuming this is a custom module
 from concurrent.futures import ThreadPoolExecutor
 import functools
 import concurrent
+import signal
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -25,6 +26,9 @@ async def run_in_executor(func, *args, **kwargs):
     except concurrent.futures.CancelledError:
         logging.warning("Task cancelled while running in executor.")
         return None  # Or raise, depending on desired behavior
+    except Exception as e:
+        logging.error(f"Error in run_in_executor: {e}", exc_info=True)
+        raise
 
 
 async def demo_all_voices():
@@ -139,9 +143,27 @@ async def main():
 
 
 if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+
+    # Properly handle Ctrl+C
+    def signal_handler():
+        print("Received Ctrl+C, shutting down...")
+        all_tasks = asyncio.all_tasks(loop)
+        for task in all_tasks:
+            task.cancel()
+        loop.stop()
+
+    loop.add_signal_handler(signal.SIGINT, signal_handler)
+
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nExiting...")
+        loop.run_until_complete(main())
+    except asyncio.CancelledError:
+        print("Asyncio task cancelled.")
     finally:
+        try:
+            # Give running tasks a chance to complete
+            loop.run_until_complete(asyncio.sleep(0.1))
+        except asyncio.CancelledError:
+            pass
         executor.shutdown(wait=True)
+        loop.close()

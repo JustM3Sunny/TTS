@@ -100,3 +100,6 @@ async def main():
             await engine.cleanup()  # Await the cleanup, assuming it's async
         except Exception as e:
             logging.exception(f"Error during cleanup: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())

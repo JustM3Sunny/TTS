@@ -57,7 +57,7 @@ class TTSClient:
         url = f"{self.api_url}{endpoint}"
         try:
             session = await self._get_session()
-            async with session.request(method, url, json=data) as response:
+            async with session.request(method, url, json=data, timeout=30) as response:  # Added timeout
                 response.raise_for_status()
                 content_type = response.headers.get('Content-Type', '')
 
@@ -80,6 +80,9 @@ class TTSClient:
             return None, None
         except aiohttp.ClientError as e:
             logger.error(f"Client error: {e} for URL: {url}")
+            return None, None
+        except asyncio.TimeoutError:
+            logger.error(f"Request timed out for URL: {url}")
             return None, None
         except Exception as e:
             logger.exception(f"Unexpected error during API request to URL: {url}")
@@ -171,7 +174,7 @@ class TTSClient:
 
             # Use a dedicated thread pool to avoid blocking the event loop
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._write_audio_file, output_path, audio_data)
+            await loop.run_in_executor(None, functools.partial(self._write_audio_file, output_path, audio_data)) # Use functools.partial
 
             logger.info(f"Audio saved to {output_path}")
             return True
