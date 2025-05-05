@@ -30,7 +30,7 @@ def check_dependencies(packages: Optional[List[str]] = None) -> bool:
         except ImportError:
             missing_dependencies.append(package)
         except Exception as e:
-            logging.exception(f"Unexpected error while checking for package {package}")
+            logging.exception(f"Unexpected error while checking for package {package}: {e}")
             return False
 
     if missing_dependencies:
@@ -135,13 +135,20 @@ def install_dependencies() -> bool:
         logging.info("Installing dependencies from requirements.txt...")
         # Use the venv's pip if a virtual environment is active
         pip_executable = [sys.executable, "-m", "pip"]
-        subprocess.check_call(pip_executable + ["install", "--no-cache-dir", "-r", REQUIREMENTS_FILE],
-                              stderr=subprocess.STDOUT)  # Capture stderr
+        process = subprocess.Popen(pip_executable + ["install", "--no-cache-dir", "-r", REQUIREMENTS_FILE],
+                                   stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+
+        if process.returncode != 0:
+            logging.error(f"Error installing dependencies.  Return code: {process.returncode}")
+            if stdout:
+                logging.error(f"Stdout: {stdout.decode()}")
+            if stderr:
+                logging.error(f"Stderr: {stderr.decode()}")
+            return False
+
         logging.info("Dependencies installed.")
         return True
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Error installing dependencies: {e.output.decode()}")
-        return False
     except FileNotFoundError:
         logging.error(f"{REQUIREMENTS_FILE} not found. Please ensure it exists in the current directory.")
         return False

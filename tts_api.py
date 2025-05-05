@@ -77,6 +77,10 @@ def validate_tts_request(data: Dict[str, Any]) -> Optional[Tuple[str, int]]:
     if len(text) > 5000:  # Increased text length limit
         return "Text too long. Maximum length is 5000 characters.", 400
 
+    voice = data.get('voice')
+    if voice and voice not in VOICE_MODELS:
+        return f"Invalid voice: {voice}", 400
+
     return None
 
 

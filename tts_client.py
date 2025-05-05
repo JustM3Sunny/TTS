@@ -65,7 +65,7 @@ class TTSClient:
                     try:
                         return await response.json(), response.status
                     except json.JSONDecodeError:
-                        logger.error(f"Failed to decode JSON from URL: {url}")
+                        logger.exception(f"Failed to decode JSON from URL: {url}") # Changed to exception
                         return None, response.status
                 elif 'audio/' in content_type:
                     return await response.read(), response.status
@@ -179,7 +179,7 @@ class TTSClient:
             logger.info(f"Audio saved to {output_path}")
             return True
         except Exception as e:
-            logger.error(f"Error saving audio file: {e}")
+            logger.exception(f"Error saving audio file: {e}")
             return False
 
     def _write_audio_file(self, output_path: str, audio_data: bytes):
@@ -188,7 +188,7 @@ class TTSClient:
             with open(output_path, "wb") as f:
                 f.write(audio_data)
         except Exception as e:
-            logger.error(f"Error writing to file {output_path}: {e}")
+            logger.exception(f"Error writing to file {output_path}: {e}")
 
 
 # Example usage

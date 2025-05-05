@@ -2,11 +2,10 @@
 import asyncio
 import os
 import logging
+import signal
 from tts_core import TTSEngine  # Assuming this is a custom module
 from concurrent.futures import ThreadPoolExecutor
 import functools
-import concurrent
-import signal
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,13 +18,12 @@ executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 async def run_in_executor(func, *args, **kwargs):
     """Helper function to run a function in the thread pool executor."""
     loop = asyncio.get_running_loop()
-    # Use functools.partial to pre-configure the function with arguments
-    wrapped_func = functools.partial(func, *args, **kwargs)
+    bound_func = functools.partial(func, *args, **kwargs)
     try:
-        return await loop.run_in_executor(executor, wrapped_func)
-    except concurrent.futures.CancelledError:
+        return await loop.run_in_executor(executor, bound_func)
+    except asyncio.CancelledError:
         logging.warning("Task cancelled while running in executor.")
-        return None  # Or raise, depending on desired behavior
+        return None
     except Exception as e:
         logging.error(f"Error in run_in_executor: {e}", exc_info=True)
         raise
@@ -36,9 +34,8 @@ async def demo_all_voices():
     output_dir = "voice_samples"
     os.makedirs(output_dir, exist_ok=True)
 
-    engine = None
+    engine = TTSEngine()  # Initialize engine here
     try:
-        engine = TTSEngine()
         voices = engine.get_available_voices()
         text = "Hello! This is a demonstration of the text-to-speech platform with different voices."
 
@@ -62,19 +59,16 @@ async def demo_all_voices():
     except Exception as e:
         logging.exception(f"An unexpected error occurred in demo_all_voices: {e}")
     finally:
-        if engine:
-            try:
-                engine.cleanup()
-            except Exception as e:
-                logging.exception(f"Error during engine cleanup: {e}")
+        try:
+            engine.cleanup()
+        except Exception as e:
+            logging.exception(f"Error during engine cleanup: {e}")
 
 
 async def interactive_demo():
     """Interactive demonstration of the TTS engine"""
-    engine = None
+    engine = TTSEngine()  # Initialize engine here
     try:
-        engine = TTSEngine()
-
         print("=== Interactive Text-to-Speech Demo ===")
         print("Available voices:")
 
@@ -119,11 +113,10 @@ async def interactive_demo():
     except Exception as e:
         logging.exception(f"An unexpected error occurred in interactive_demo: {e}")
     finally:
-        if engine:
-            try:
-                engine.cleanup()
-            except Exception as e:
-                logging.exception(f"Error during engine cleanup: {e}")
+        try:
+            engine.cleanup()
+        except Exception as e:
+            logging.exception(f"Error during engine cleanup: {e}")
 
 
 async def main():
@@ -143,27 +136,29 @@ async def main():
 
 
 if __name__ == "__main__":
+    async def shutdown(signal):
+        """Cancel all tasks and shutdown the event loop."""
+        logging.info(f"Received exit signal {signal.name}...")
+        logging.info("Shutting down thread pool executor...")
+        executor.shutdown(wait=True)
+        logging.info("Cancelling all pending tasks...")
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        [task.cancel() for task in tasks]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logging.info(f"Releasing event loop resources...")
+        asyncio.get_event_loop().stop()
+
     loop = asyncio.get_event_loop()
 
-    # Properly handle Ctrl+C
-    def signal_handler():
-        print("Received Ctrl+C, shutting down...")
-        all_tasks = asyncio.all_tasks(loop)
-        for task in all_tasks:
-            task.cancel()
-        loop.stop()
-
-    loop.add_signal_handler(signal.SIGINT, signal_handler)
+    # Install signal handlers
+    for signal_name in ('SIGINT', 'SIGTERM'):
+        loop.add_signal_handler(getattr(signal, signal_name),
+                                lambda signal_name=signal_name: asyncio.create_task(shutdown(signal.Signals[signal_name])))
 
     try:
         loop.run_until_complete(main())
     except asyncio.CancelledError:
-        print("Asyncio task cancelled.")
+        logging.info("Main task cancelled.")
     finally:
-        try:
-            # Give running tasks a chance to complete
-            loop.run_until_complete(asyncio.sleep(0.1))
-        except asyncio.CancelledError:
-            pass
-        executor.shutdown(wait=True)
+        logging.info("Closing event loop.")
         loop.close()
