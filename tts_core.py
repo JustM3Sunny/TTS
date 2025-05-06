@@ -134,12 +134,14 @@ class TTSEngine:
 
         try:
             session = await self._get_http_session()  # Get the session
-            async with session.post(self.DEEPGRAM_API_URL, json=payload) as response:
+            async with session.post(self.DEEPGRAM_API_URL, json=payload, timeout=30) as response:
                 response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
                 return await response.read()  # Get raw audio data directly
 
         except aiohttp.ClientError as e:
             logger.error(f"API request failed: {e}")
+        except asyncio.TimeoutError:
+            logger.error("API request timed out.")
         except Exception as e:
             logger.exception(f"Unexpected error during audio generation: {e}")
 
@@ -171,8 +173,8 @@ class TTSEngine:
         temp_file = os.path.join(self.temp_dir, f"{self.TEMP_FILE_PREFIX}{audio_hash}{self.TEMP_FILE_SUFFIX}")
 
         try:
-            with open(temp_file, "wb") as f:
-                f.write(audio_data)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._write_audio_data, temp_file, audio_data)
             yield temp_file
         except Exception as e:
             logger.exception(f"Error writing to temporary file: {e}")
@@ -184,6 +186,15 @@ class TTSEngine:
                     os.remove(temp_file)
                 except OSError as e:
                     logger.warning(f"Failed to remove temporary file {temp_file}: {e}")
+
+    def _write_audio_data(self, temp_file: str, audio_data: bytes):
+        """Helper function to write audio data to a file in a non-blocking manner."""
+        try:
+            with open(temp_file, "wb") as f:
+                f.write(audio_data)
+        except Exception as e:
+            logger.exception(f"Error writing to temporary file: {e}")
+            raise
 
 
     async def play_audio(self, audio_data: bytes) -> bool:
@@ -206,12 +217,8 @@ class TTSEngine:
                     return False  # Indicate failure if temp_file creation failed
 
                 try:
-                    sound = pygame.mixer.Sound(temp_file)
-                    sound.play()
-
-                    # Wait for the audio to finish playing
-                    while pygame.mixer.get_busy():
-                        await asyncio.sleep(0.1)
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, self._play_sound, temp_file)
                     return True
                 except pygame.error as e:
                     logger.error(f"Pygame error playing audio: {e}")
@@ -222,6 +229,19 @@ class TTSEngine:
             logger.exception(f"Error playing audio: {e}")
             return False
 
+    def _play_sound(self, temp_file: str):
+        """Helper function to play sound in a non-blocking manner."""
+        try:
+            sound = pygame.mixer.Sound(temp_file)
+            sound.play()
+
+            # Wait for the audio to finish playing
+            while pygame.mixer.get_busy():
+                import time
+                time.sleep(0.1)
+        except pygame.error as e:
+            logger.error(f"Pygame error playing audio: {e}")
+            raise
 
     async def save_audio_file(self, text: str, output_path: str, voice: Optional[str] = None) -> bool:
         """
@@ -240,13 +260,22 @@ class TTSEngine:
             return False
 
         try:
-            with open(output_path, "wb") as f:
-                f.write(audio_data)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._write_audio, output_path, audio_data)
             logger.info(f"Audio saved to {output_path}")
             return True
         except Exception as e:
             logger.exception(f"Error saving audio file: {e}")
             return False
+
+    def _write_audio(self, output_path: str, audio_data: bytes):
+        """Helper function to write audio data to a file in a non-blocking manner."""
+        try:
+            with open(output_path, "wb") as f:
+                f.write(audio_data)
+        except Exception as e:
+            logger.exception(f"Error saving audio file: {e}")
+            raise
 
     async def close(self):
         """Close the aiohttp session."""

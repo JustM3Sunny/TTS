@@ -57,7 +57,7 @@ async def get_voices():
     """Return a list of available voices"""
     return jsonify({
         "success": True,
-        "voices": VOICE_MODELS
+        "voices": list(VOICE_MODELS)  # Convert to list for JSON serialization
     })
 
 

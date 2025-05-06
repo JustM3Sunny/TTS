@@ -51,7 +51,7 @@ async def demo_all_voices():
                 logging.exception(f"An error occurred while processing voice {voice_name}: {e}")
 
         # Use asyncio.gather to run voice processing concurrently
-        await asyncio.gather(*(process_voice(voice_name) for voice_name in voices.keys()))
+        await asyncio.gather(*(process_voice(voice_name) for voice_name in voices))
 
         logging.info("\nAll voice samples generated!")
         logging.info(f"You can find the audio samples in the '{output_dir}' directory.")
@@ -136,9 +136,9 @@ async def main():
 
 
 if __name__ == "__main__":
-    async def shutdown(signal):
+    async def shutdown(signal_name):
         """Cancel all tasks and shutdown the event loop."""
-        logging.info(f"Received exit signal {signal.name}...")
+        logging.info(f"Received exit signal {signal_name}...")
         logging.info("Shutting down thread pool executor...")
         executor.shutdown(wait=True)
         logging.info("Cancelling all pending tasks...")
@@ -151,9 +151,8 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
 
     # Install signal handlers
-    for signal_name in ('SIGINT', 'SIGTERM'):
-        loop.add_signal_handler(getattr(signal, signal_name),
-                                lambda signal_name=signal_name: asyncio.create_task(shutdown(signal.Signals[signal_name])))
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, functools.partial(asyncio.create_task, shutdown(sig.name)))
 
     try:
         loop.run_until_complete(main())

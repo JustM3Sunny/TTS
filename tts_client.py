@@ -96,7 +96,11 @@ class TTSClient:
             Dictionary of voice names and their model IDs
         """
         response, status = await self._safe_api_request("GET", "/api/voices")
-        if response and isinstance(response, dict) and response.get("success", False) and "voices" in response:
+        if not isinstance(response, dict):
+            logger.warning(f"Invalid response type from API: {type(response)}, Status: {status}")
+            return {}
+
+        if response.get("success", False) and "voices" in response:
             return response["voices"]
         else:
             logger.warning(f"Invalid response from API: {response}, Status: {status}")
@@ -149,7 +153,11 @@ class TTSClient:
 
         response, status = await self._safe_api_request("POST", "/api/tts/base64", data=payload)
 
-        if response and isinstance(response, dict) and response.get("success", False) and "audio_data" in response:
+        if not isinstance(response, dict):
+            logger.warning(f"Invalid response type from API: {type(response)}, Status: {status}")
+            return None
+
+        if response.get("success", False) and "audio_data" in response:
             return response["audio_data"]
         else:
             logger.warning(f"Base64 TTS conversion failed. Response: {response}, Status: {status}")
